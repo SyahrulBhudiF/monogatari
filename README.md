@@ -17,7 +17,7 @@ The in-app **How to play** button explains the same in more detail.
 
 ## Requirements
 
-- Go 1.24 or newer
+- Go 1.26 or newer
 - [templ](https://templ.guide/quick-start/installation) (`go install github.com/a-h/templ/cmd/templ@latest`), only to edit `views.templ`
 - An OpenRouter API key for real stories. Without one the app plays a built-in mock story, which is enough to try the game and work on the UI.
 
