@@ -1,13 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"fmt"
-	"io"
+	"io/fs"
 	"log"
+	"mime"
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -20,11 +27,75 @@ var staticFS embed.FS
 
 var room = NewRoom()
 
+// indexHTML is the static shell page, rendered once.
+var indexHTML = func() []byte {
+	var b bytes.Buffer
+	if err := Index().Render(context.Background(), &b); err != nil {
+		panic(err)
+	}
+	return b.Bytes()
+}()
+
+// asset is an embedded static file with its ETag and a gzip copy, both built at startup.
+type asset struct {
+	body, gz []byte
+	etag, ct string
+}
+
+func loadAssets() map[string]*asset {
+	out := map[string]*asset{}
+	fs.WalkDir(staticFS, "static", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, _ := staticFS.ReadFile(p)
+		sum := sha256.Sum256(b)
+		a := &asset{body: b, etag: `"` + hex.EncodeToString(sum[:8]) + `"`, ct: mime.TypeByExtension(path.Ext(p))}
+		if !strings.HasSuffix(p, ".woff2") {
+			var gz bytes.Buffer
+			zw, _ := gzip.NewWriterLevel(&gz, gzip.BestCompression)
+			zw.Write(b)
+			zw.Close()
+			a.gz = gz.Bytes()
+		}
+		out["/"+p] = a
+		return nil
+	})
+	return out
+}
+
+// serveStatic answers with an ETag so repeat visits cost a 304, and gzip where it helps.
+func serveStatic(assets map[string]*asset) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a := assets[r.URL.Path]
+		if a == nil {
+			http.NotFound(w, r)
+			return
+		}
+		h := w.Header()
+		h.Set("Cache-Control", "no-cache")
+		h.Set("ETag", a.etag)
+		h.Set("Vary", "Accept-Encoding")
+		if r.Header.Get("If-None-Match") == a.etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		h.Set("Content-Type", a.ct)
+		body := a.body
+		if a.gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			h.Set("Content-Encoding", "gzip")
+			body = a.gz
+		}
+		h.Set("Content-Length", strconv.Itoa(len(body)))
+		w.Write(body)
+	}
+}
+
 // sig holds the signals the browser sends with each request. Pid is the player's private token.
 type sig struct {
 	Pid  string `json:"pid"`
-	Name string `json:"name"`
-	Pass string `json:"pass"`
+	Name string `json:"_name"`
+	Pass string `json:"_pass"`
 }
 
 func readSig(r *http.Request) sig {
@@ -44,7 +115,8 @@ func index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	Index().Render(r.Context(), w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(indexHTML)
 }
 
 // clientIP prefers the first X-Forwarded-For entry, which the portal proxy sets.
@@ -67,14 +139,23 @@ func stream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	sse := datastar.NewSSE(w, r)
-	rc := http.NewResponseController(w)
+	sse := datastar.NewSSE(w, r, datastar.WithCompression(datastar.WithBrotli(datastar.WithBrotliLevel(4)), datastar.WithGzip()))
 	ch := make(chan struct{}, 1)
 	room.connect(tok, ch)
 	defer room.disconnect(tok, ch)
 	tick := time.NewTicker(20 * time.Second)
 	defer tick.Stop()
-	if sse.PatchElements(room.View(tok)) != nil {
+	// send patches the page only when this viewer's HTML changed since the last frame.
+	var last string
+	send := func(force bool) bool {
+		v := room.View(tok)
+		if v == last && !force {
+			return true
+		}
+		last = v
+		return sse.PatchElements(v) == nil
+	}
+	if !send(true) {
 		return
 	}
 	for {
@@ -82,14 +163,14 @@ func stream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ch:
-			if sse.PatchElements(room.View(tok)) != nil {
+			if !send(false) {
 				return
 			}
 		case <-tick.C:
-			if _, err := io.WriteString(w, ": ping\n\n"); err != nil {
+			// A forced frame doubles as a keep-alive: raw writes would bypass the compressor.
+			if !send(true) {
 				return
 			}
-			rc.Flush()
 		}
 	}
 }
@@ -116,11 +197,7 @@ func qint(r *http.Request, k string) int {
 
 func newMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	static := http.FileServerFS(staticFS)
-	mux.HandleFunc("GET /static/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache")
-		static.ServeHTTP(w, r)
-	})
+	mux.HandleFunc("GET /static/", serveStatic(loadAssets()))
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /stream", stream)
 	post := func(path string, fn func(tok string, r *http.Request, s sig)) { mux.HandleFunc("POST "+path, act(fn)) }

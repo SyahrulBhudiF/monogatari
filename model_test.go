@@ -104,3 +104,20 @@ func TestSentenceEndsWithPunctuationAndIsSingle(t *testing.T) {
 		t.Fatal("two sentences accepted")
 	}
 }
+
+func TestObjSplitStreamsObjectsAcrossChunks(t *testing.T) {
+	in := "```json\n{\"lines\": [{\"a\": \"x}\\\"{\", \"b\": [1, {\"c\": 2}]}, {\"d\": \"]\"}]}"
+	for _, size := range []int{1, 3, len(in)} {
+		var sp objSplit
+		var got []string
+		for i := 0; i < len(in); i += size {
+			for _, o := range sp.feed(in[i:min(i+size, len(in))]) {
+				got = append(got, string(o))
+			}
+		}
+		want := []string{`{"a": "x}\"{", "b": [1, {"c": 2}]}`, `{"d": "]"}`}
+		if !slices.Equal(got, want) {
+			t.Fatalf("chunk size %d: got %q", size, got)
+		}
+	}
+}

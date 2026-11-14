@@ -1,0 +1,190 @@
+package main
+
+import (
+	"fmt"
+	"strconv"
+)
+
+templ Tile(i int, c []Seg, cls, act string) {
+	if act == "" {
+		<div class={ "tile", cls } id={ fmt.Sprintf("c%d", i) } lang="ja">@Segs(c)</div>
+	} else {
+		<button class={ "tile", cls } id={ fmt.Sprintf("c%d", i) } lang="ja" data-on:click={ "@post('" + act + "')" }>@Segs(c)</button>
+	}
+}
+
+templ PlayView(v V) {
+	{{ r := v.R }}
+	{{ ls := r.Lines[r.Turn] }}
+	{{ lp := ls.Plan }}
+	{{ ch := r.Plan.Characters[lp.Player] }}
+	{{ pl := r.Players[lp.Player] }}
+	{{ mine := v.MI == lp.Player }}
+	if mine && r.Step == "scene" && ls.Status == "ready" {
+		<i id={ fmt.Sprintf("alert-%d", r.Turn) } data-init="document.title='● Your turn';navigator.vibrate&&navigator.vibrate(200)"></i>
+	} else {
+		<i id="alert-off" data-init="document.title='Monogatari'"></i>
+	}
+	<div class="progress"><div class="bar" style={ widthStyle(r.progressPct()) }></div></div>
+	<div class="roster top">
+		for i, p := range r.Players {
+			{{ ok, _ := r.score(i) }}
+			<div class={ "person", templ.KV("active", i == lp.Player), templ.KV("off", !r.on(p)) } id={ fmt.Sprintf("s-%d", i) }>
+				<span class={ "dot", "lv-" + p.Level }>{ r.Plan.Characters[i].Emoji }</span>
+				<b>{ p.Name }</b>
+				<span class="pts">{ strconv.Itoa(ok) }</span>
+			</div>
+		}
+	</div>
+	if r.Turn > 0 {
+		<div class="history">
+			for i := max(0, r.Turn-2); i < r.Turn; i++ {
+				if d := r.Lines[i].Data; d != nil && r.Lines[i].Status == "ready" {
+					<div class="past" id={ fmt.Sprintf("h-%d", i) }>
+						<span>{ r.Plan.Characters[r.Lines[i].Plan.Player].Emoji }</span>
+						<div class="jp" lang="ja">@Sentence(d)</div>
+					</div>
+				}
+			}
+		</div>
+	}
+	<section class="stage" id={ fmt.Sprintf("stage-%d", r.Turn) }>
+		<div class="who">
+			<div class="avatar bob">{ ch.Emoji }</div>
+			<div>
+				<b lang="ja">{ ch.Name }</b> @Badge(pl)
+				<div class="muted">
+					if mine {
+						Your turn
+					} else {
+						{ pl.Name + " is playing" }
+					}
+				</div>
+			</div>
+		</div>
+		<div class="textbox">
+			if ls.Status != "ready" {
+				<p class="narr">Writing this line<span class="dots"></span></p>
+			} else if r.Step == "scene" || r.Step == "reorder" {
+				<p class="narr">{ lp.Beat }</p>
+				if r.Step == "reorder" {
+					<p class="cue">“{ ls.Data.English }”</p>
+				}
+			} else {
+				<p class="jp big-jp" lang="ja">@Sentence(ls.Data)</p>
+				if v.open("tr") {
+					<p class="cue">{ ls.Data.English }</p>
+				}
+				@TrToggle(v)
+			}
+		</div>
+	</section>
+	if ls.Status == "ready" {
+		<section class="panel">
+			@Panel(v, mine)
+		</section>
+	}
+	if v.isHost() && !mine {
+		<button class="link" data-on:click="@post('/skip')">Skip this turn</button>
+	}
+}
+
+templ Panel(v V, mine bool) {
+	{{ r := v.R }}
+	{{ ls := r.Lines[r.Turn] }}
+	{{ d := ls.Data }}
+	{{ pl := r.Players[ls.Plan.Player] }}
+	if r.Step == "scene" {
+		if mine {
+			<button class="btn green" data-on:click="@post('/begin')">Start</button>
+		} else {
+			<p class="muted center">{ pl.Name + " is getting ready…" }</p>
+		}
+	} else if r.Step == "reorder" {
+		<div class="slots">
+			if len(r.Placed) == 0 {
+				<span class="placeholder">Tap the words in order</span>
+			}
+			for _, c := range r.Placed {
+				if mine {
+					@Tile(c, d.Chunks[c], tileCls(r.Wrong[c]), fmt.Sprintf("/unplace?c=%d", c))
+				} else {
+					@Tile(c, d.Chunks[c], tileCls(r.Wrong[c]), "")
+				}
+			}
+		</div>
+		<div class="bank">
+			for _, c := range r.Shuf {
+				if containsInt(r.Placed, c) {
+					<div class="ghost-tile" id={ fmt.Sprintf("g%d", c) }></div>
+				} else if mine {
+					@Tile(c, d.Chunks[c], "", fmt.Sprintf("/place?c=%d", c))
+				} else {
+					@Tile(c, d.Chunks[c], "", "")
+				}
+			}
+		</div>
+		if len(r.Wrong) > 0 {
+			<p class="err center" role="status">Not quite. Check the red words.</p>
+		}
+		if mine {
+			<button class="btn green" disabled?={ len(r.Placed) != len(d.Chunks) } data-on:click="@post('/confirm')">Check</button>
+		}
+	} else if r.Step == "reading" {
+		if mine {
+			<div class="say">🎤 Read it aloud</div>
+			<button class="btn green" data-on:click="@post('/readdone')">Done</button>
+		} else {
+			<div class="say">{ "🎧 " + pl.Name + " is reading" }</div>
+		}
+	} else {
+		<h3 class="q">{ d.Quiz.Question }</h3>
+		<div class="opts">
+			for i, o := range d.Quiz.Options {
+				if r.Step == "quiz" && mine {
+					<button class="opt" id={ fmt.Sprintf("o%d", i) } data-on:click={ fmt.Sprintf("@post('/answer?o=%d')", i) }><span class="key">{ strconv.Itoa(i + 1) }</span>{ o }</button>
+				} else {
+					<div class={ "opt", optCls(r.Step, i, d.Quiz.Answer, r.Pick) } id={ fmt.Sprintf("o%d", i) }><span class="key">{ strconv.Itoa(i + 1) }</span>{ o }</div>
+				}
+			}
+		</div>
+		if r.Step == "result" {
+			@ResultSheet(v, mine)
+		}
+	}
+}
+
+templ ResultSheet(v V, mine bool) {
+	{{ r := v.R }}
+	{{ d := r.Lines[r.Turn].Data }}
+	{{ good := r.Pick == d.Quiz.Answer }}
+	{{ pl := r.Players[r.Lines[r.Turn].Plan.Player] }}
+	<div class={ "sheet", templ.KV("good", good || r.Auto), templ.KV("bad", !good && !r.Auto) } id={ fmt.Sprintf("sheet-%d", r.Turn) } role="status" data-init="setTimeout(()=>window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}),50)">
+		<div class="sheet-in">
+			<div class="sheet-msg">
+				<div class="sheet-ic">
+					if good || r.Auto {
+						✓
+					} else {
+						✗
+					}
+				</div>
+				<div>
+					<b>
+						if r.Auto {
+							{ pl.Name + " was away. Played for them" }
+						} else if good {
+							Nice!
+						} else {
+							The correct answer is highlighted
+						}
+					</b>
+					<p>{ d.Quiz.Explanation }</p>
+				</div>
+			</div>
+			if mine {
+				<button class={ "btn", templ.KV("green", good), templ.KV("red", !good) } data-on:click="@post('/next')">Continue</button>
+			}
+		</div>
+	</div>
+}

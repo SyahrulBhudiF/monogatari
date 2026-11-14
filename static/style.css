@@ -267,3 +267,10 @@ ruby rt{font-size:.45em;letter-spacing:0}
   .opt{padding:14px 12px}
 }
 .who b+.lv,.tm b+.lv{margin-left:8px}
+
+.lines-strip{display:flex;gap:4px}
+.lines-strip i{flex:1;height:8px;border-radius:99px;background:var(--swan);transition:background .3s}
+.lines-strip .ls-ready{background:var(--green)}
+.lines-strip .ls-failed{background:var(--red)}
+.lines-strip .ls-pending{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{background:var(--hare)}}

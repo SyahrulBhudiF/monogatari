@@ -10,6 +10,11 @@ import (
 	"github.com/a-h/templ"
 )
 
+// pidScript gives each tab a random id in sessionStorage; it is inlined so the page needs no extra request.
+const pidScript = "<script>(function () { var p = sessionStorage.pid; if (!p) { var a = new Uint8Array(16); crypto.getRandomValues(a); p = Array.from(a, function (x) { return x.toString(16).padStart(2, '0'); }).join(''); sessionStorage.pid = p; } window.PID = p; })();</script>"
+
+func PidScript() templ.Component { return templ.Raw(pidScript) }
+
 // V is what a page render knows about the viewer. Me is nil for someone who has not joined.
 type V struct {
 	R     *Room

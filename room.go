@@ -98,10 +98,16 @@ func (r *Room) addLog(msg string) {
 		r.Logs = r.Logs[len(r.Logs)-200:]
 	}
 	r.logMu.Unlock()
+	// Only viewers with the log open need a new frame for a log line.
 	go func() {
 		r.mu.Lock()
-		r.notify()
-		r.mu.Unlock()
+		defer r.mu.Unlock()
+		for _, p := range r.Players {
+			if p.Open["log"] {
+				r.notify()
+				return
+			}
+		}
 	}()
 }
 
@@ -511,27 +517,26 @@ func (r *Room) generate(ps []PlayerInfo, gen int) {
 	go func() {
 		defer cancel()
 		t := time.Now()
-		lines := genScript(ctx, plan, ps)
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if gen != r.genID {
-			return
-		}
-		ok := 0
-		for i, d := range lines {
+		var ok int
+		genScript(ctx, plan, ps, func(i int, d *LineData) {
+			r.mu.Lock()
+			defer r.mu.Unlock()
+			if gen != r.genID {
+				return
+			}
 			if d == nil {
 				r.Lines[i].Status = "failed"
-				continue
+				if r.Phase == "playing" && r.Step == "scene" && r.Turn == i {
+					r.enterTurn(i)
+				}
+			} else {
+				ok++
+				r.Lines[i].Status, r.Lines[i].Data = "ready", d
+				logf("line %d %s: %s", i, plan.Characters[plan.LinePlan[i].Player].Name, sentence(d, identity(len(d.Chunks))))
 			}
-			ok++
-			r.Lines[i].Status, r.Lines[i].Data = "ready", d
-			logf("line %d %s: %s", i, plan.Characters[plan.LinePlan[i].Player].Name, sentence(d, identity(len(d.Chunks))))
-		}
+			r.notify()
+		})
 		logf("script ready: %d/%d lines (%.1fs)", ok, n, time.Since(t).Seconds())
-		if r.Phase == "playing" && r.Step == "scene" && r.Lines[r.Turn].Status == "failed" {
-			r.enterTurn(r.Turn)
-		}
-		r.notify()
 	}()
 }
 

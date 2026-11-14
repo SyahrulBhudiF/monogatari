@@ -1,0 +1,133 @@
+package main
+
+import (
+	"fmt"
+)
+
+templ BriefingView(v V) {
+	{{ br := v.R.Plan.Briefings[v.MI] }}
+	{{ ch := v.R.Plan.Characters[v.MI] }}
+	{{ step := v.Me.Step }}
+	<div class="brief">
+		<div class="steps">
+			for i := 0; i < 3; i++ {
+				<i class={ templ.KV("on", i <= step) }></i>
+			}
+		</div>
+		if step == 0 {
+			<section class="step">
+				<div class="row hero">
+					<div class="avatar bob">{ ch.Emoji }</div>
+					<div>
+						<h2 lang="ja">{ ch.Name }</h2>
+						<div>@Badge(v.Me) <span class="muted">{ ch.Personality }</span></div>
+					</div>
+				</div>
+				<div class="mission">
+					<div class="mi goalc">
+						<span class="ic">🎯</span>
+						<div><b>Your goal</b><p>@Notation(br.Goal)</p></div>
+					</div>
+					<div class="mi teachc">
+						<span class="ic">💡</span>
+						<div>
+							<b>
+								if len(v.R.Players) == 1 {
+									Remember
+								} else {
+									Teach the others
+								}
+							</b>
+							<p>@Notation(br.Teach)</p>
+						</div>
+					</div>
+				</div>
+				if len(v.R.Players) > 1 {
+					<h3>Your team</h3>
+					<div class="team">
+						for i, o := range v.R.Plan.Briefings {
+							if i != v.MI {
+								<div class="row tm">
+									<div class="avatar sm">{ v.R.Plan.Characters[i].Emoji }</div>
+									<div><b>{ v.R.Players[i].Name }</b> @Badge(v.R.Players[i])<p>@Notation(o.Goal)</p></div>
+								</div>
+							}
+						}
+					</div>
+				}
+			</section>
+		} else if step == 1 {
+			<section class="step">
+				<h2>Words to know</h2>
+				<div class="wordgrid">
+					for _, wd := range br.Words {
+						<div class="wc" lang="ja"><ruby>{ wd.JP }<rt>{ wd.Reading }</rt></ruby><span lang="en">{ wd.EN }</span></div>
+					}
+				</div>
+			</section>
+		} else {
+			<section class="step">
+				<h2 lang="ja">@Notation(v.R.Plan.Scenario.Title)</h2>
+				<div class="story">
+					for _, l := range readingLines(br.Reading) {
+						<p class="jp sent" lang="ja">@NotationWrap(l)</p>
+					}
+				</div>
+				<button class="link" data-on:click="@post('/toggle?k=en')">
+					if v.Me.Open["en"] {
+						Hide English
+					} else {
+						Show English
+					}
+				</button>
+				if v.Me.Open["en"] {
+					<p class="en">{ br.ReadingEN }</p>
+				}
+				@LogBox(v)
+			</section>
+		}
+	</div>
+	@Dock(v, step)
+}
+
+templ Dock(v V, step int) {
+	{{ ready := v.R.linesReady() }}
+	{{ n := len(v.R.Lines) }}
+	<div class="dock">
+		<div class="dock-in">
+			if ready < n {
+				<div class="lines-strip" role="status" aria-label={ fmt.Sprintf("Writing lines %d of %d", ready, n) }>
+					for _, l := range v.R.Lines {
+						<i class={ "ls-" + l.Status }></i>
+					}
+				</div>
+				<div class="muted center">{ fmt.Sprintf("Writing lines %d/%d", ready, n) }<span class="dots"></span></div>
+			}
+			<div class="dock-btns">
+				if step > 0 {
+					<button class="btn ghost back" data-on:click="@post('/brief?d=-1')">Back</button>
+				}
+				if step < 2 {
+					<button class="btn green" data-on:click="@post('/brief?d=1')">Continue</button>
+				} else {
+					@ReadyButton(v, "Start", "Waiting")
+				}
+			</div>
+			if step == 2 && v.isHost() {
+				<button class="link" data-on:click="@post('/startnow')">Start without waiting</button>
+			}
+		</div>
+	</div>
+}
+
+templ TrToggle(v V) {
+	if v.Me != nil {
+		<button class="link tr" data-on:click="@post('/toggle?k=tr')">
+			if v.open("tr") {
+				Hide translation
+			} else {
+				Show translation
+			}
+		</button>
+	}
+}

@@ -1,0 +1,131 @@
+package main
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+templ Badge(p *Player) {
+	<span class={ "lv", "lv-" + p.Level }>{ badgeText(p) }</span>
+}
+
+templ Slider(cur int) {
+	<div class="slider">
+		<div class="lvl-label">{ lvLabel(cur) }</div>
+		<div class="lvl-groups">
+			for g, l := range levels {
+				<div class="lvl-group">
+					<div class="lvl-steps">
+						for k := 0; k < 3; k++ {
+							<button
+								class={ "step-b", templ.KV("on", g*3+k <= cur), templ.KV("cur", g*3+k == cur) }
+								aria-label={ positions[k] + " " + l }
+								aria-pressed={ strconv.FormatBool(g*3+k == cur) }
+								data-on:click={ fmt.Sprintf("@post('/level?lv=%d')", g*3+k) }
+							></button>
+						}
+					</div>
+					<span>{ l }</span>
+				</div>
+			}
+		</div>
+	</div>
+}
+
+templ Roster(v V, kick bool) {
+	if len(v.R.Players) > 0 {
+		<div class="roster">
+			for _, p := range v.R.Players {
+				<div class={ "person", templ.KV("off", !v.R.on(p)), templ.KV("ready", p.Ready) } id={ "p-" + p.ID }>
+					<span class={ "dot", "lv-" + p.Level }>{ initial(p.Name) }</span>
+					<b>{ p.Name }</b>
+					@Badge(p)
+					if v.R.host() == p {
+						<span class="crown" title="Host">👑</span>
+					}
+					<span class="tick">✓</span>
+					if kick && v.isHost() && p != v.Me {
+						<button class="kick" aria-label={ "Remove " + p.Name } data-on:click={ "@post('/kick?id=" + p.ID + "')" }>✕</button>
+					}
+				</div>
+			}
+		</div>
+	}
+}
+
+templ ReadyButton(v V, on, off string) {
+	{{ rd, c := v.R.readyCount() }}
+	if v.Me.Ready {
+		<button class="btn ghost" data-on:click="@post('/ready')">{ fmt.Sprintf("%s · %d/%d", off, rd, c) }</button>
+	} else {
+		<button class="btn green" data-on:click="@post('/ready')">{ fmt.Sprintf("%s · %d/%d", on, rd, c) }</button>
+	}
+}
+
+templ LogBox(v V) {
+	if v.Me != nil {
+		<div class="logbox" id="logbox">
+			<button class="link" data-on:click="@post('/toggle?k=log')">
+				if v.Me.Open["log"] {
+					Hide log
+				} else {
+					Show log
+				}
+			</button>
+			if v.Me.Open["log"] {
+				<pre class="log">{ strings.Join(v.R.logLines(), "\n") }</pre>
+			}
+		</div>
+	}
+}
+
+templ JoinView(v V) {
+	<div class="card pop">
+		<h1>Join the story</h1>
+		<input class="input" data-bind:_name placeholder="Your name" maxlength="16" autocomplete="off" aria-label="Your name" data-on:keydown.enter="$_name && @post('/join',{filterSignals:{include:/^(pid|_name)$/,exclude:/(?!)/}})"/>
+		@Slider(v.R.prefLv(v.Token))
+		<button class="btn green" data-on:click="$_name && @post('/join',{filterSignals:{include:/^(pid|_name)$/,exclude:/(?!)/}})">Join</button>
+		if msg := v.R.joinErr[v.Token]; msg != "" {
+			<p class="err center" role="alert">{ msg }</p>
+		}
+		if v.R.Err != "" {
+			<p class="err center" role="alert">{ v.R.Err }</p>
+		}
+		<button class="btn ghost" data-on:click="$_guide=true">How to play</button>
+	</div>
+	@Roster(v, false)
+}
+
+templ LobbyView(v V) {
+	<div class="card pop">
+		<h1>Lobby</h1>
+		@Roster(v, true)
+		@Slider(lvIndex(v.Me.Level, v.Me.Pos))
+		if len(v.R.Players) == 1 {
+			if v.R.Solo {
+				<button class="btn ghost" aria-pressed="true" data-on:click="@post('/solo?on=0')">Solo: on</button>
+			} else {
+				<button class="btn ghost" aria-pressed="false" data-on:click="@post('/solo?on=1')">Play solo</button>
+			}
+		}
+		@ReadyButton(v, "Ready", "Not ready")
+		if len(v.R.Players) < 2 && !v.R.Solo {
+			<p class="muted center">Need 2 players, or play solo</p>
+		}
+		if v.R.Err != "" {
+			<p class="err center" role="alert">{ v.R.Err }</p>
+		}
+		@LogBox(v)
+		<button class="link" data-on:click="@post('/leave')">Leave</button>
+	</div>
+}
+
+templ GeneratingView(v V) {
+	<div class="card pop center">
+		<div class="big bob">📖</div>
+		<h2>Writing your story<span class="dots"></span></h2>
+		@Roster(v, false)
+		@LogBox(v)
+	</div>
+}

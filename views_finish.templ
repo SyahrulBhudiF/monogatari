@@ -1,0 +1,76 @@
+package main
+
+import (
+	"fmt"
+)
+
+templ FinishedView(v V) {
+	{{ r := v.R }}
+	<div class="confetti" aria-hidden="true">
+		for i := 0; i < 36; i++ {
+			<i style={ confettiStyle(i) }></i>
+		}
+	</div>
+	<div class="card pop center">
+		<div class="big bob">🎉</div>
+		<h1 lang="ja">@Notation(r.Plan.Scenario.Title)</h1>
+		<div class="roster">
+			for i, p := range r.Players {
+				{{ ok, n := r.score(i) }}
+				<div class="person">
+					<span class={ "dot", "lv-" + p.Level }>{ r.Plan.Characters[i].Emoji }</span>
+					<b>{ p.Name }</b>
+					@Badge(p)
+					<span class="pts">{ fmt.Sprintf("%d/%d", ok, n) }</span>
+					if a := r.autoCount(i); a > 0 {
+						<span class="muted">{ fmt.Sprintf("+%d auto", a) }</span>
+					}
+				</div>
+			}
+		</div>
+	</div>
+	<div class="card">
+		<div class="row between"><h3>Story</h3>@TrToggle(v)</div>
+		for i, l := range r.Lines {
+			if l.Status == "ready" {
+				<div class="past full">
+					<span>{ r.Plan.Characters[l.Plan.Player].Emoji }</span>
+					<div>
+						<div class="jp" lang="ja">@Sentence(l.Data)</div>
+						if v.open("tr") {
+							<div class="muted">{ l.Data.English }</div>
+						}
+					</div>
+					if r.turnMissed(i) {
+						<span class="missed" title="Quiz missed">✗</span>
+					}
+				</div>
+			}
+		}
+	</div>
+	<div class="card">
+		<h3>Words</h3>
+		for i, b := range r.Plan.Briefings {
+			<div class="vocab">
+				<div class="row"><div class="avatar sm">{ r.Plan.Characters[i].Emoji }</div><b>{ r.Players[i].Name }</b></div>
+				<div class="words">
+					for _, wd := range b.Words {
+						<div class="word" lang="ja"><ruby>{ wd.JP }<rt>{ wd.Reading }</rt></ruby><span lang="en">{ wd.EN }</span></div>
+					}
+				</div>
+			</div>
+		}
+	</div>
+	@LogBox(v)
+	<div class="dock">
+		<div class="dock-in">
+			<button class="btn green" data-on:click="@post('/reset')">
+				if v.Me != nil {
+					Play again
+				} else {
+					Back to lobby
+				}
+			</button>
+		</div>
+	</div>
+}

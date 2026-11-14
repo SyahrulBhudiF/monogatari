@@ -1,3 +1,28 @@
-bin/
+# Binaries
+/bin/
+/monogatari
+*.exe
+*.test
+*.out
+
+# Go tooling
+/vendor/
+go.work
+go.work.sum
+*.prof
+*.pprof
+coverage.*
+
+# Secrets and local config
 .env
-.amp/portals/*
+.env.*
+!.env.example
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Amp scratch
+.amp/
