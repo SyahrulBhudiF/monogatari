@@ -43,6 +43,8 @@ type Room struct {
 	streams   map[string]int
 	prefs     map[string]int
 	joinErr   map[string]string
+	authed    map[string]bool
+	fails     map[string][]time.Time
 	hideFuri  map[string]bool
 	autoT     *time.Timer
 	genID     int
@@ -76,7 +78,7 @@ func NewRoom() *Room {
 	return &Room{
 		Phase: "lobby", Pick: -1, MaxGames: 10,
 		subs: map[chan struct{}]struct{}{}, streams: map[string]int{}, prefs: map[string]int{},
-		joinErr: map[string]string{}, hideFuri: map[string]bool{},
+		joinErr: map[string]string{}, authed: map[string]bool{}, fails: map[string][]time.Time{}, hideFuri: map[string]bool{},
 	}
 }
 
@@ -211,10 +213,40 @@ func (r *Room) dropIfGone(token string) {
 	}
 }
 
-func (r *Room) Join(token, name, pass string) {
+// allowed reports whether the browser may use the room: always when no passphrase is set.
+func (r *Room) allowed(token string) bool { return r.Pass == "" || r.authed[token] }
+
+const (
+	maxFails   = 5
+	failWindow = 10 * time.Minute
+)
+
+// Unlock checks the room passphrase. Failed tries are counted per client address.
+func (r *Room) Unlock(token, ip, pass string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.Phase != "lobby" {
+	if r.allowed(token) {
+		return
+	}
+	cut := time.Now().Add(-failWindow)
+	r.fails[ip] = slices.DeleteFunc(r.fails[ip], func(t time.Time) bool { return t.Before(cut) })
+	switch {
+	case len(r.fails[ip]) >= maxFails:
+		r.joinErr[token] = "Too many wrong tries. Try again in a few minutes."
+	case subtle.ConstantTimeCompare([]byte(pass), []byte(r.Pass)) == 1:
+		r.authed[token] = true
+		delete(r.joinErr, token)
+	default:
+		r.fails[ip] = append(r.fails[ip], time.Now())
+		r.joinErr[token] = "Wrong passphrase"
+	}
+	r.notify()
+}
+
+func (r *Room) Join(token, name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.Phase != "lobby" || !r.allowed(token) {
 		return
 	}
 	name = strings.TrimSpace(name)
@@ -222,11 +254,6 @@ func (r *Room) Join(token, name, pass string) {
 		name = string(rs[:16])
 	}
 	if name == "" {
-		return
-	}
-	if r.Pass != "" && subtle.ConstantTimeCompare([]byte(pass), []byte(r.Pass)) != 1 {
-		r.joinErr[token] = "Wrong passphrase"
-		r.notify()
 		return
 	}
 	delete(r.joinErr, token)
@@ -260,6 +287,9 @@ func (r *Room) SetSolo(token string, on bool) {
 func (r *Room) SetLevel(token string, lv int) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.allowed(token) {
+		return
+	}
 	lv = max(0, min(14, lv))
 	r.prefs[token] = lv
 	if _, p := r.find(token); p != nil && r.Phase == "lobby" {
@@ -374,6 +404,9 @@ func (r *Room) Toggle(token, key string) {
 func (r *Room) ToggleFuri(token string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if !r.allowed(token) {
+		return
+	}
 	r.hideFuri[token] = !r.hideFuri[token]
 	r.notify()
 }

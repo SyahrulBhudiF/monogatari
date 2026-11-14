@@ -119,7 +119,9 @@ templ Menu(v V, nofg bool) {
 
 templ Root(v V) {
 	@Shell(v) {
-		if v.Me == nil {
+		if !v.R.allowed(v.Token) {
+			@Gate(v)
+		} else if v.Me == nil {
 			@Outsider(v)
 		} else if v.R.Phase == "lobby" {
 			@LobbyView(v)
@@ -133,6 +135,18 @@ templ Root(v V) {
 			@FinishedView(v)
 		}
 	}
+}
+
+templ Gate(v V) {
+	<div class="card pop">
+		<h1>Enter the passphrase</h1>
+		<input class="input" type="password" data-bind:pass placeholder="Passphrase" autocomplete="off" aria-label="Room passphrase" data-on:keydown.enter="$pass && @post('/unlock')"/>
+		<button class="btn green" data-on:click="$pass && @post('/unlock')">Unlock</button>
+		if msg := v.R.joinErr[v.Token]; msg != "" {
+			<p class="err center" role="alert">{ msg }</p>
+		}
+		<button class="btn ghost" data-on:click="$guide=true">How to play</button>
+	</div>
 }
 
 templ Outsider(v V) {
@@ -230,9 +244,6 @@ templ JoinView(v V) {
 	<div class="card pop">
 		<h1>Join the story</h1>
 		<input class="input" data-bind:name placeholder="Your name" maxlength="16" autocomplete="off" aria-label="Your name" data-on:keydown.enter="$name && @post('/join')"/>
-		if v.R.Pass != "" {
-			<input class="input" type="password" data-bind:pass placeholder="Room passphrase" autocomplete="off" aria-label="Room passphrase" data-on:keydown.enter="$name && @post('/join')"/>
-		}
 		@Slider(v.R.prefLv(v.Token))
 		<button class="btn green" data-on:click="$name && @post('/join')">Join</button>
 		if msg := v.R.joinErr[v.Token]; msg != "" {

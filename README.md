@@ -61,11 +61,11 @@ All settings are environment variables.
 | `PROVIDER` | `stepfun` | OpenRouter provider to pin. Empty turns pinning off. If the provider is down, requests fail |
 | `REASONING` | `low` | Reasoning effort sent to the model. `off` omits it |
 | `JUDGE` | on | `off` skips the review call for each line |
-| `ROOM_PASSPHRASE` | none | If set, joining needs this passphrase |
+| `ROOM_PASSPHRASE` | none | If set, the whole app shows only a passphrase screen until it is entered. Wrong tries are limited to 5 per 10 minutes per address |
 | `MAX_GAMES_PER_HOUR` | `10` | Cap on stories started per hour |
 | `PORT` | `8080` | Listen port |
 
-Set `ROOM_PASSPHRASE` before putting the app on a public address. Every story costs model calls on your key.
+Set `ROOM_PASSPHRASE` before putting the app on a public address: without it, anyone with the link can watch games and start stories. Every story costs model calls on your key.
 
 ## How it works
 

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/starfederation/datastar-go/datastar"
@@ -43,6 +45,18 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	Index().Render(r.Context(), w)
+}
+
+// clientIP prefers the first X-Forwarded-For entry, which the portal proxy sets.
+func clientIP(r *http.Request) string {
+	if f := r.Header.Get("X-Forwarded-For"); f != "" {
+		return strings.TrimSpace(strings.Split(f, ",")[0])
+	}
+	h, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return h
 }
 
 func validToken(t string) bool { return len(t) >= 16 && len(t) <= 64 }
@@ -110,7 +124,8 @@ func newMux() *http.ServeMux {
 	mux.HandleFunc("GET /{$}", index)
 	mux.HandleFunc("GET /stream", stream)
 	post := func(path string, fn func(tok string, r *http.Request, s sig)) { mux.HandleFunc("POST "+path, act(fn)) }
-	post("/join", func(t string, r *http.Request, s sig) { room.Join(t, s.Name, s.Pass) })
+	post("/unlock", func(t string, r *http.Request, s sig) { room.Unlock(t, clientIP(r), s.Pass) })
+	post("/join", func(t string, r *http.Request, s sig) { room.Join(t, s.Name) })
 	post("/level", func(t string, r *http.Request, s sig) { room.SetLevel(t, qint(r, "lv")) })
 	post("/solo", func(t string, r *http.Request, s sig) { room.SetSolo(t, r.URL.Query().Get("on") == "1") })
 	post("/ready", func(t string, r *http.Request, s sig) { room.ToggleReady(t) })

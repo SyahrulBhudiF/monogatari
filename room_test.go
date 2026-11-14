@@ -14,7 +14,7 @@ func playingRoom(n int) (*Room, []string) {
 	for i := 0; i < n; i++ {
 		tok := strings.Repeat(string(rune('a'+i)), 20)
 		toks = append(toks, tok)
-		r.Join(tok, "P"+string(rune('1'+i)), "")
+		r.Join(tok, "P"+string(rune('1'+i)))
 		r.streams[tok] = 1
 		infos = append(infos, PlayerInfo{Index: i, Name: r.Players[i].Name, Level: "N5", Pos: "middle"})
 	}
@@ -101,8 +101,8 @@ func TestAutoPlayEarnsNoStar(t *testing.T) {
 
 func TestReadyVoteResets(t *testing.T) {
 	r := NewRoom()
-	r.Join(strings.Repeat("a", 20), "A", "")
-	r.Join(strings.Repeat("b", 20), "B", "")
+	r.Join(strings.Repeat("a", 20), "A")
+	r.Join(strings.Repeat("b", 20), "B")
 	r.streams[strings.Repeat("a", 20)] = 1
 	r.streams[strings.Repeat("b", 20)] = 1
 	r.ToggleReady(strings.Repeat("a", 20))
@@ -114,22 +114,57 @@ func TestReadyVoteResets(t *testing.T) {
 		t.Fatal("level change kept the vote")
 	}
 	r.ToggleReady(strings.Repeat("a", 20))
-	r.Join(strings.Repeat("c", 20), "C", "")
+	r.Join(strings.Repeat("c", 20), "C")
 	if r.Players[0].Ready {
 		t.Fatal("new player kept the vote")
 	}
 }
 
-func TestJoinPassphraseAndKick(t *testing.T) {
+func TestPassphraseGate(t *testing.T) {
 	r := NewRoom()
 	r.Pass = "sesame"
-	a, b := strings.Repeat("a", 20), strings.Repeat("b", 20)
-	r.Join(a, "A", "wrong")
-	if len(r.Players) != 0 || r.joinErr[a] == "" {
+	a := strings.Repeat("a", 20)
+	r.Join(a, "A")
+	r.SetLevel(a, 9)
+	if len(r.Players) != 0 || len(r.prefs) != 0 {
+		t.Fatal("locked browser changed the room")
+	}
+	if page := r.View(a); !strings.Contains(page, "Enter the passphrase") || strings.Contains(page, "Join the story") {
+		t.Fatal("locked browser does not see only the gate")
+	}
+	r.Unlock(a, "1.1.1.1", "wrong")
+	if r.authed[a] || r.joinErr[a] == "" {
 		t.Fatal("wrong passphrase accepted")
 	}
-	r.Join(a, "A", "sesame")
-	r.Join(b, "B", "sesame")
+	r.Unlock(a, "1.1.1.1", "sesame")
+	r.Join(a, "A")
+	if len(r.Players) != 1 {
+		t.Fatal("correct passphrase did not unlock")
+	}
+}
+
+func TestPassphraseBruteForceLimit(t *testing.T) {
+	r := NewRoom()
+	r.Pass = "sesame"
+	for i := 0; i < maxFails; i++ {
+		r.Unlock(strings.Repeat(string(rune('a'+i)), 20), "9.9.9.9", "nope")
+	}
+	fresh := strings.Repeat("z", 20) // a new token from the same address
+	r.Unlock(fresh, "9.9.9.9", "sesame")
+	if r.authed[fresh] {
+		t.Fatal("correct passphrase accepted after too many failures from one address")
+	}
+	r.Unlock(fresh, "8.8.8.8", "sesame")
+	if !r.authed[fresh] {
+		t.Fatal("another address should not be blocked")
+	}
+}
+
+func TestKick(t *testing.T) {
+	r := NewRoom()
+	a, b := strings.Repeat("a", 20), strings.Repeat("b", 20)
+	r.Join(a, "A")
+	r.Join(b, "B")
 	r.streams[a], r.streams[b] = 1, 1
 	r.Kick(b, r.Players[0].ID)
 	if len(r.Players) != 2 {
@@ -145,8 +180,8 @@ func TestGameStartCap(t *testing.T) {
 	r := NewRoom()
 	r.MaxGames = 0
 	a, b := strings.Repeat("a", 20), strings.Repeat("b", 20)
-	r.Join(a, "A", "")
-	r.Join(b, "B", "")
+	r.Join(a, "A")
+	r.Join(b, "B")
 	r.streams[a], r.streams[b] = 1, 1
 	r.ToggleReady(a)
 	r.ToggleReady(b)
@@ -191,7 +226,7 @@ func TestFinishedPage(t *testing.T) {
 func TestSoloStartsAlone(t *testing.T) {
 	r := NewRoom()
 	a, b := strings.Repeat("a", 20), strings.Repeat("b", 20)
-	r.Join(a, "A", "")
+	r.Join(a, "A")
 	r.streams[a] = 1
 	r.ToggleReady(a)
 	if r.Phase != "lobby" {
@@ -205,9 +240,9 @@ func TestSoloStartsAlone(t *testing.T) {
 	}
 
 	r2 := NewRoom()
-	r2.Join(a, "A", "")
+	r2.Join(a, "A")
 	r2.SetSolo(a, true)
-	r2.Join(b, "B", "")
+	r2.Join(b, "B")
 	if r2.Solo {
 		t.Fatal("solo stays on after a second player joins")
 	}
