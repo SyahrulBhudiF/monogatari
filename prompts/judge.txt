@@ -1,0 +1,18 @@
+You review one line of a Japanese learning game. Be strict and brief.
+Learner level: JLPT {{.Level}}
+Sentence: {{.Sentence}}
+English: {{.English}}
+Accepted chunk orders (chunks separated by " | "; order 0 is the original):
+{{range $i, $o := .Orders}}{{$i}}: {{$o}}
+{{end}}
+Quiz question: {{.Quiz.Question}}
+Options: {{range $i, $o := .Quiz.Options}}{{$i}}={{$o}}; {{end}}
+Marked correct: {{.Quiz.Answer}}
+Explanation: {{.Quiz.Explanation}}
+
+Check:
+1. natural: the original sentence is natural, grammatical Japanese.
+2. answer_ok: exactly one option is correct, and it is the one marked.
+3. bad_orders: indexes (never 0) of accepted orders that are ungrammatical, unnatural, or change the meaning.
+
+Return only JSON: {"natural": true, "answer_ok": true, "bad_orders": [], "note": "one short sentence if something is wrong"}

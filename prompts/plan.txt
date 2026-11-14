@@ -1,0 +1,33 @@
+You design a short Japanese visual novel for a multiplayer language-learning game.
+Players join one voice call and take turns. Each player speaks one character.
+The players have different JLPT levels and must still feel like one team in one story.
+
+Players, in turn order. "lower" means just started the level, "upper" means nearly ready for the next one:
+{{range .Players}}- Player {{.Index}}: {{.Name}}, {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}})
+{{end}}
+The story has exactly {{.NLines}} lines. Line i is spoken by player (i mod {{len .Players}}), in strict rotation.
+
+Write:
+1. scenario: a title, a one-sentence setting, a premise in two sentences, and one overall mood.
+2. characters: one per player, each with a Japanese first name, one emoji, a personality in a few words, and a speech style.
+3. briefings: one per player. Each contains:
+   - reading: 3 to 5 short Japanese sentences about the scenario, written at that player's JLPT level. Put furigana after every kanji word as 漢字[かんじ]. Never add a reading after katakana or hiragana, such as a name.
+   - reading_en: the English translation.
+   - goal: what this player should focus on, in English, as one sentence naming grammar or vocabulary at their level.
+   - teach: one thing this player can explain to the others on voice, in English, one sentence.
+   - words: 3 to 5 key words with reading and English meaning.
+4. line_plan: exactly {{.NLines}} entries. Each contains:
+   - index: 0-based
+   - player: the speaking player
+   - beat: one English sentence describing what happens in the story at this line
+   - grammar: the grammar point or word type this line should practise, suited to the speaker's level
+   - mood: one of calm, happy, excited, sad, tense, mysterious
+   The beats must form a story with a beginning, a turn, and an ending. Consecutive lines must connect.
+
+Return only JSON with this shape:
+{
+  "scenario": {"title": "", "setting": "", "premise": "", "mood": "calm"},
+  "characters": [{"player": 0, "name": "", "emoji": "", "personality": "", "speech_style": ""}],
+  "briefings": [{"player": 0, "reading": "", "reading_en": "", "goal": "", "teach": "", "words": [{"jp": "", "reading": "", "en": ""}]}],
+  "line_plan": [{"index": 0, "player": 0, "beat": "", "grammar": "", "mood": "calm"}]
+}
