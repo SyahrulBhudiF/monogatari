@@ -115,6 +115,7 @@ func newMux() *http.ServeMux {
 	post("/solo", func(t string, r *http.Request, s sig) { room.SetSolo(t, r.URL.Query().Get("on") == "1") })
 	post("/ready", func(t string, r *http.Request, s sig) { room.ToggleReady(t) })
 	post("/leave", func(t string, r *http.Request, s sig) { room.Leave(t) })
+	post("/abort", func(t string, r *http.Request, s sig) { room.Abort(t) })
 	post("/kick", func(t string, r *http.Request, s sig) { room.Kick(t, r.URL.Query().Get("id")) })
 	post("/brief", func(t string, r *http.Request, s sig) { room.SetStep(t, qint(r, "d")) })
 	post("/toggle", func(t string, r *http.Request, s sig) { room.Toggle(t, r.URL.Query().Get("k")) })

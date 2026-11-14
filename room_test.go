@@ -180,8 +180,11 @@ func TestFinishedPage(t *testing.T) {
 			t.Errorf("finished page lacks %q", want)
 		}
 	}
-	if strings.Contains(r.View("zzzzzzzzzzzzzzzzzzzz"), "Play again") {
-		t.Error("a watcher can restart the game")
+	if w := r.View("zzzzzzzzzzzzzzzzzzzz"); !strings.Contains(w, "Back to lobby") {
+		t.Error("a watcher should see Back to lobby")
+	}
+	if strings.Contains(page, "Show translation") == false || strings.Contains(page, "Play again") == false {
+		t.Error("finished page lacks translation toggle or Play again")
 	}
 }
 
@@ -212,4 +215,39 @@ func TestSoloStartsAlone(t *testing.T) {
 	if r2.Solo {
 		t.Fatal("solo allowed with two players")
 	}
+}
+
+func TestLeaveMidGameAndAbort(t *testing.T) {
+	r, toks := playingRoom(3)
+	r.Leave(toks[1])
+	if _, p := r.find(toks[1]); p != nil {
+		t.Fatal("player who left still has a seat in views")
+	}
+	if len(r.Players) != 3 {
+		t.Fatal("seats must stay so line speakers keep their indexes")
+	}
+	if !strings.Contains(r.View(toks[1]), "watching") {
+		t.Fatal("player who left should watch")
+	}
+	r.Abort(toks[2]) // not the host
+	if r.Phase != "playing" {
+		t.Fatal("non-host ended the game")
+	}
+	r.Abort(toks[0])
+	if r.Phase != "lobby" || len(r.Players) != 2 || r.Err == "" {
+		t.Fatalf("phase %s players %d err %q", r.Phase, len(r.Players), r.Err)
+	}
+	if r.Lines != nil || r.Plan != nil {
+		t.Fatal("story kept after abort")
+	}
+}
+
+func TestFinishedResetByAnyone(t *testing.T) {
+	r, toks := playingRoom(2)
+	r.Phase = "finished"
+	r.Reset("zzzzzzzzzzzzzzzzzzzz")
+	if r.Phase != "lobby" || len(r.Players) != 2 {
+		t.Fatalf("phase %s players %d", r.Phase, len(r.Players))
+	}
+	_ = toks
 }

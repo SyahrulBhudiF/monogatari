@@ -13,6 +13,10 @@ Go server, [Datastar](https://data-star.dev) UI, [templ](https://templ.guide) vi
 5. **Turns.** Strict rotation. Order the word blocks, check, read the sentence aloud, answer a quiz. Wrong answers and wrong orders can be retried or shown, never punished.
 6. **Wrap-up.** Full story, stars, missed lines and every player's word list.
 
+### Navigation
+
+The **☰** button opens a menu on every screen: how to play, show or hide furigana, leave, and play again. Leaving during a game keeps your seat's lines: they are played for you and you keep watching. The host (first connected player, shown with a crown) can end a running game for everyone. The wrap-up has a fixed **Play again** button. English translations are hidden by default and shown with **Show translation**.
+
 ### Solo mode
 
 Alone in the lobby, press **Play solo** and then **Ready**. Instead of a conversation you get a short narrated text about one character, written at your level. You read it sentence by sentence and play the same turn each time: order the words, read aloud, answer the quiz. Everything else is unchanged. Solo turns off if a second player joins, and needs no second player to start.

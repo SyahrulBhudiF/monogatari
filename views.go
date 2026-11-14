@@ -64,13 +64,21 @@ func Segs(ss []Seg) templ.Component { return templ.Raw(segsHTML(ss)) }
 
 func Notation(s string) templ.Component { return templ.Raw(segsHTML(parseNotation(s))) }
 
+// Sentence wraps each chunk in a no-break span so a long line only breaks between chunks.
 func Sentence(d *LineData) templ.Component {
 	var b strings.Builder
 	for _, c := range d.Chunks {
-		b.WriteString(segsHTML(c))
+		b.WriteString(`<span class="ck">` + segsHTML(c) + `</span>`)
 	}
 	return templ.Raw(b.String())
 }
+
+// NotationWrap is Notation with a line-break opportunity after each comma.
+func NotationWrap(s string) templ.Component {
+	return templ.Raw(strings.ReplaceAll(segsHTML(parseNotation(s)), "、", "、<wbr>"))
+}
+
+func (v V) open(k string) bool { return v.Me != nil && v.Me.Open[k] }
 
 func readingLines(s string) []string {
 	var out []string

@@ -21,7 +21,7 @@ const (
 // Player.Token is private to its owner's browser. Player.ID is the public handle used in pages.
 type Player struct {
 	Token, ID, Name, Level, Pos string
-	Ready                       bool
+	Ready, Left                 bool
 	Step                        int
 	Open                        map[string]bool
 }
@@ -38,15 +38,16 @@ type TurnLog struct {
 }
 
 type Room struct {
-	mu       sync.Mutex
-	subs     map[chan struct{}]struct{}
-	streams  map[string]int
-	prefs    map[string]int
-	joinErr  map[string]string
-	hideFuri map[string]bool
-	autoT    *time.Timer
-	genID    int
-	starts   []time.Time
+	mu        sync.Mutex
+	subs      map[chan struct{}]struct{}
+	streams   map[string]int
+	prefs     map[string]int
+	joinErr   map[string]string
+	hideFuri  map[string]bool
+	autoT     *time.Timer
+	genID     int
+	cancelGen context.CancelFunc
+	starts    []time.Time
 
 	Solo     bool
 	Pass     string
@@ -123,11 +124,11 @@ func (r *Room) notify() {
 	}
 }
 
-func (r *Room) on(p *Player) bool { return r.streams[p.Token] > 0 }
+func (r *Room) on(p *Player) bool { return !p.Left && r.streams[p.Token] > 0 }
 
 func (r *Room) find(token string) (int, *Player) {
 	for i, p := range r.Players {
-		if p.Token == token {
+		if p.Token == token && !p.Left {
 			return i, p
 		}
 	}
@@ -271,14 +272,59 @@ func (r *Room) SetLevel(token string, lv int) {
 	r.notify()
 }
 
+// Leave removes the player in the lobby. During a game the seat stays so lines keep their
+// speakers: the player is marked as gone, their turns are played for them, and they become a watcher.
 func (r *Room) Leave(token string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if i, p := r.find(token); p != nil && r.Phase == "lobby" {
-		r.Players = slices.Delete(r.Players, i, i+1)
-		r.checkStart()
-		r.notify()
+	i, p := r.find(token)
+	if p == nil {
+		return
 	}
+	switch r.Phase {
+	case "lobby":
+		r.Players = slices.Delete(r.Players, i, i+1)
+		r.Solo = r.Solo && len(r.Players) == 1
+		r.checkStart()
+	case "finished":
+		return
+	default:
+		p.Left = true
+		if r.Phase == "playing" {
+			r.scheduleAuto(2 * time.Second)
+		}
+		r.checkStart()
+	}
+	r.notify()
+}
+
+// toLobby stops any running game and returns everyone still connected to a fresh lobby.
+func (r *Room) toLobby(msg string) {
+	r.genID++
+	if r.cancelGen != nil {
+		r.cancelGen()
+		r.cancelGen = nil
+	}
+	if r.autoT != nil {
+		r.autoT.Stop()
+		r.autoT = nil
+	}
+	r.Phase, r.Err, r.Plan, r.Lines, r.Log, r.Solo = "lobby", msg, nil, nil, nil, false
+	r.Players = slices.DeleteFunc(r.Players, func(p *Player) bool { return !r.on(p) })
+	for _, p := range r.Players {
+		p.Ready, p.Step = false, 0
+	}
+}
+
+// Abort lets the host end a running game for everyone.
+func (r *Room) Abort(token string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !r.isHost(token) || r.Phase == "lobby" || r.Phase == "finished" {
+		return
+	}
+	r.toLobby("The host ended the game.")
+	r.notify()
 }
 
 func (r *Room) Kick(token, id string) {
@@ -319,7 +365,7 @@ func (r *Room) SetStep(token string, d int) {
 func (r *Room) Toggle(token, key string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, p := r.find(token); p != nil && (key == "log" || key == "en") {
+	if _, p := r.find(token); p != nil && (key == "log" || key == "en" || key == "tr") {
 		p.Open[key] = !p.Open[key]
 		r.notify()
 	}
@@ -400,6 +446,11 @@ func (r *Room) startPlay() {
 func (r *Room) generate(ps []PlayerInfo, gen int) {
 	n := nLinesFor(len(ps))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	r.mu.Lock()
+	if gen == r.genID {
+		r.cancelGen = cancel
+	}
+	r.mu.Unlock()
 	logf("generating story: %d players, %d lines", len(ps), n)
 	plan, err := genPlan(ctx, ps, n)
 	r.mu.Lock()
@@ -629,18 +680,14 @@ func (r *Room) Next(token string) {
 	r.act(token, "result", func(*LineData) { r.enterTurn(r.Turn + 1) })
 }
 
+// Reset starts a new lobby after a finished game. Anyone can do it, including people who left.
 func (r *Room) Reset(token string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, p := r.find(token); p == nil || r.Phase != "finished" {
+	if r.Phase != "finished" {
 		return
 	}
-	r.genID++
-	r.Phase, r.Err, r.Plan, r.Lines, r.Log, r.Solo = "lobby", "", nil, nil, nil, false
-	r.Players = slices.DeleteFunc(r.Players, func(p *Player) bool { return !r.on(p) })
-	for _, p := range r.Players {
-		p.Ready, p.Step = false, 0
-	}
+	r.toLobby("")
 	r.notify()
 }
 
