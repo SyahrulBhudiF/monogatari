@@ -183,7 +183,23 @@ func genPlan(ctx context.Context, ps []PlayerInfo, nLines int) (*Plan, error) {
 	return generate(ctx, "plan", prompt, func(p *Plan) error { return checkPlan(p, len(ps), nLines) })
 }
 
-func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int) (*LineData, error) {
+// TLine is a finished line of the story, shown to the model so the next line follows it.
+type TLine struct{ Name, JP, EN string }
+
+// lineErr runs the structural checks and requires the chunk count to fit the player's level,
+// so one line stays one short sentence.
+func lineErr(d *LineData, level string) error {
+	if err := checkLine(d); err != nil {
+		return err
+	}
+	rng := chunkRange[level]
+	if n := len(d.Chunks); n > rng[1]+1 || n < rng[0]-1 {
+		return fmt.Errorf("%d chunks, but a JLPT %s line needs %d to %d. Write one short sentence", n, level, rng[0], rng[1])
+	}
+	return nil
+}
+
+func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int, hist []TLine) (*LineData, error) {
 	if apiKey == "" {
 		time.Sleep(time.Duration(500+i*400) * time.Millisecond)
 		return mockLine(i), nil
@@ -200,7 +216,7 @@ func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int) (*LineData
 	rng := chunkRange[pl.Level]
 	prompt, err := render("line.txt", map[string]any{
 		"Title": plan.Scenario.Title, "Setting": plan.Scenario.Setting,
-		"Characters": plan.Characters, "Prev": prev, "Beat": lp.Beat, "Next": next,
+		"Characters": plan.Characters, "History": hist, "Prev": prev, "Beat": lp.Beat, "Next": next,
 		"Speaker": plan.Characters[lp.Player], "Level": pl.Level, "Pos": pl.Pos, "LevelDesc": pl.LevelDesc,
 		"Grammar": lp.Grammar, "MinChunks": rng[0], "MaxChunks": rng[1],
 	})
@@ -208,7 +224,7 @@ func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int) (*LineData
 		return nil, err
 	}
 	return generate(ctx, fmt.Sprintf("line %d", i), prompt, func(d *LineData) error {
-		if err := checkLine(d); err != nil {
+		if err := lineErr(d, pl.Level); err != nil {
 			return err
 		}
 		return judgeLine(ctx, d, pl.Level)
@@ -245,6 +261,7 @@ func judgeLine(ctx context.Context, d *LineData, level string) error {
 		Natural   bool   `json:"natural"`
 		AnswerOK  bool   `json:"answer_ok"`
 		BadOrders []int  `json:"bad_orders"`
+		Narration bool   `json:"narration"`
 		Note      string `json:"note"`
 	}
 	if json.Unmarshal([]byte(extractJSON(txt)), &v) != nil {
@@ -253,6 +270,9 @@ func judgeLine(ctx context.Context, d *LineData, level string) error {
 	}
 	if !v.Natural {
 		return fmt.Errorf("a reviewer says the sentence is unnatural or ungrammatical: %s", v.Note)
+	}
+	if v.Narration {
+		return fmt.Errorf("the line is narration. It must be something the character says aloud to the others")
 	}
 	if !v.AnswerOK {
 		return fmt.Errorf("a reviewer says the quiz answer is wrong or ambiguous: %s", v.Note)
@@ -268,4 +288,112 @@ func judgeLine(ctx context.Context, d *LineData, level string) error {
 	}
 	d.AcceptedOrders = keep
 	return nil
+}
+
+type scriptLine struct {
+	Index, MinChunks, MaxChunks             int
+	Name, Level, Pos, LevelDesc, Beat, Gram string
+}
+
+// genScript writes the whole conversation in one call so it reads as one scene. Lines that fail the
+// checks or the reviewer are then rewritten one at a time, with the lines before them as context.
+// A nil entry means the line could not be written.
+func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo) []*LineData {
+	n := len(plan.LinePlan)
+	if apiKey == "" {
+		time.Sleep(2 * time.Second)
+		out := make([]*LineData, n)
+		for i := range out {
+			out[i] = mockLine(i)
+		}
+		return out
+	}
+	var sl []scriptLine
+	for i, lp := range plan.LinePlan {
+		pl := ps[lp.Player]
+		rng := chunkRange[pl.Level]
+		sl = append(sl, scriptLine{Index: i, MinChunks: rng[0], MaxChunks: rng[1], Name: plan.Characters[lp.Player].Name,
+			Level: pl.Level, Pos: pl.Pos, LevelDesc: pl.LevelDesc, Beat: lp.Beat, Gram: lp.Grammar})
+	}
+	out := make([]*LineData, n)
+	var bad []int
+	prompt, err := render("script.txt", map[string]any{
+		"Title": plan.Scenario.Title, "Setting": plan.Scenario.Setting, "Premise": plan.Scenario.Premise,
+		"Characters": plan.Characters, "Lines": sl, "N": n,
+	})
+	var sc *struct {
+		Lines []LineData `json:"lines"`
+	}
+	if err == nil {
+		sc, err = generate(ctx, "script", prompt, func(s *struct {
+			Lines []LineData `json:"lines"`
+		}) error {
+			if len(s.Lines) < n {
+				return fmt.Errorf("need exactly %d lines, got %d", n, len(s.Lines))
+			}
+			s.Lines = s.Lines[:n]
+			good, first := 0, error(nil)
+			for i := range s.Lines {
+				if e := lineErr(&s.Lines[i], ps[plan.LinePlan[i].Player].Level); e == nil {
+					good++
+				} else if first == nil {
+					first = fmt.Errorf("line %d: %v", i, e)
+				}
+			}
+			if good < (n+1)/2 {
+				return fmt.Errorf("too many invalid lines, for example %v", first)
+			}
+			return nil
+		})
+	}
+	if err != nil {
+		logf("script failed, writing lines one by one: %v", err)
+		for i := range out {
+			bad = append(bad, i)
+		}
+	} else {
+		for i := range sc.Lines {
+			if e := lineErr(&sc.Lines[i], ps[plan.LinePlan[i].Player].Level); e != nil {
+				logf("line %d rejected: %v", i, e)
+				bad = append(bad, i)
+				continue
+			}
+			out[i] = &sc.Lines[i]
+		}
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		for i := range out {
+			if out[i] == nil {
+				continue
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if e := judgeLine(ctx, out[i], ps[plan.LinePlan[i].Player].Level); e != nil {
+					logf("line %d rejected: %v", i, e)
+					mu.Lock()
+					bad = append(bad, i)
+					out[i] = nil
+					mu.Unlock()
+				}
+			}()
+		}
+		wg.Wait()
+	}
+	slices.Sort(bad)
+	for _, i := range bad {
+		var hist []TLine
+		for j := 0; j < i; j++ {
+			if out[j] != nil {
+				hist = append(hist, TLine{Name: plan.Characters[plan.LinePlan[j].Player].Name, JP: sentence(out[j], identity(len(out[j].Chunks))), EN: out[j].English})
+			}
+		}
+		d, e := genLine(ctx, plan, ps, i, hist)
+		if e != nil {
+			logf("line %d failed: %v", i, e)
+			continue
+		}
+		out[i] = d
+	}
+	return out
 }

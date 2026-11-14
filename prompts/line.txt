@@ -5,17 +5,25 @@ Story: {{.Title}}. {{.Setting}}
 Characters:
 {{range .Characters}}- {{.Name}}: {{.Personality}}; speech style: {{.SpeechStyle}}
 {{end}}
-Previous beat: {{.Prev}}
+Dialogue so far (this is what was actually said):
+{{range .History}}{{.Name}}: {{.JP}} ({{.EN}})
+{{else}}(nothing yet, this is the opening)
+{{end}}Previous beat: {{.Prev}}
 This beat: {{.Beat}}
 Next beat: {{.Next}}
 Speaker: {{.Speaker.Name}}, speech style: {{.Speaker.SpeechStyle}}
 Learner level: {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}}). Lower means just started this level: stay at the easier end. Upper means nearly ready for the next level: you may use a little of the next level.
 Grammar to practise: {{.Grammar}}
 
-Write one sentence the speaker says in this beat.
+Write one sentence the speaker says in this beat. It is one turn in a real conversation:
+- It must follow directly from the last line of the dialogue so far: answer it, react to it, or continue it. Do not restart or change the subject.
+- Speak to the other characters by name or with あなた/きみ where natural. Reuse the same people, places and objects already mentioned instead of inventing new ones.
+- Keep the same facts. Never contradict an earlier line.
+- Each line is what the character says aloud to the others, in first person. It is never narration about other people (no "he said that...").
+- It must still say what this beat says, and lead into the next beat.
 - Use only vocabulary and grammar a JLPT {{.Level}} learner can read, plus at most 2 new words.
 - Split the sentence into {{.MinChunks}} to {{.MaxChunks}} chunks (bunsetsu). A chunk is a content word with its particles or endings, for example 駅で, 友達に, 会いました. Each chunk stays together when reordered.
-- The chunks must be in the correct order. Never split a chunk in the middle of a word.
+- The chunks must be in the correct order. Never split a chunk in the middle of a word. The sentence ends with 。 or ？ inside its last chunk, and uses 、 inside chunks where natural. One line is exactly ONE sentence.
 - Each chunk is a list of segments. A segment is {"t": text} for kana or punctuation, or {"t": kanji, "r": reading} for kanji, so that furigana sits on the kanji only. Example for 駅で: [{"t":"駅","r":"えき"},{"t":"で"}]. Give furigana for every kanji.
 - accepted_orders lists every ordering of the chunks that is natural, grammatical Japanese with the same meaning. Each ordering is a list of chunk indexes. Include the original order [0,1,2,...]. Do not include orderings that change the meaning or sound wrong.
 - english is a natural one-line English translation.

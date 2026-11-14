@@ -1,0 +1,28 @@
+You write the dialogue of a short Japanese visual novel for a language-learning game.
+All {{.N}} lines below are ONE continuous conversation between the characters, in one place and one moment. Write all of them now, in order.
+
+Story: {{.Title}}. {{.Setting}} {{.Premise}}
+Characters:
+{{range .Characters}}- {{.Name}}: {{.Personality}}; speech style: {{.SpeechStyle}}
+{{end}}
+Lines to write, in order. Each line is one sentence spoken by that character, at that player's level:
+{{range .Lines}}Line {{.Index}}: {{.Name}}, {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}}), {{.MinChunks}} to {{.MaxChunks}} chunks. Beat: {{.Beat}} Grammar to practise: {{.Gram}}
+{{end}}
+How the conversation must read:
+- Every line answers, reacts to, or continues the line before it. Read the lines in order as if they were a real chat. Never restart or change the subject.
+- Characters talk to each other: use names, questions and answers, agreement, surprise.
+- Reuse the same people, places and objects. Never contradict an earlier line.
+- Lines for lower levels stay simple, but must still fit the conversation. Lower means just started the level, upper means nearly ready for the next level.
+- Each line is what the character says aloud to the others, in first person. It is never narration about other people (no "he said that...").
+- The last line closes the story.
+
+For each line:
+- Use only vocabulary and grammar a learner at that level can read, plus at most 2 new words.
+- chunks: the sentence split into bunsetsu in the correct order. A chunk is a content word with its particles or endings, for example 駅で, 友達に, 会いました. Never split a word in the middle. The sentence ends with 。 or ？ inside its last chunk, and uses 、 inside chunks where natural. One line is exactly ONE sentence.
+- Each chunk is a list of segments. A segment is {"t": text} for kana or punctuation, or {"t": kanji, "r": reading} for kanji, so furigana sits on the kanji only. Example for 駅で: [{"t":"駅","r":"えき"},{"t":"で"}]. Give furigana for every kanji.
+- accepted_orders: every ordering of the chunks that is natural, grammatical Japanese with the same meaning. Each ordering is a list of chunk indexes. Include the original order [0,1,2,...]. The last chunk stays last. Do not include orderings that change the meaning or sound wrong.
+- english: a natural one-line English translation.
+- quiz: one multiple-choice question about this sentence with exactly 4 distinct options and one correct answer. It tests the grammar point or a word in the sentence. For N5 and N4, write the question in simple Japanese followed by English in parentheses. answer is the index of the correct option. explanation is one short English sentence.
+
+Return only JSON with exactly {{.N}} entries in "lines", in order:
+{"lines": [{"chunks": [[{"t": "", "r": ""}]], "accepted_orders": [[0, 1, 2]], "english": "", "quiz": {"question": "", "options": ["", "", "", ""], "answer": 0, "explanation": ""}}]}

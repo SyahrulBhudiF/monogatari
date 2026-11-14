@@ -72,3 +72,35 @@ func TestNotationDropsReadingAfterKana(t *testing.T) {
 		t.Fatalf("got %+v want %+v", got, want)
 	}
 }
+
+func TestLineErrEnforcesLevelRange(t *testing.T) {
+	short := line("私[わたし]は|駅[えき]で|会[あ]いました")
+	if err := lineErr(short, "N5"); err != nil {
+		t.Fatal(err)
+	}
+	long := line("私[わたし]は|駅[えき]で|友達[ともだち]に|会[あ]って|一緒[いっしょ]に|映画[えいが]を|見[み]に|行[い]きました")
+	if err := lineErr(long, "N5"); err == nil {
+		t.Fatal("an 8-chunk line passed for N5")
+	}
+	if err := lineErr(long, "N2"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSentenceEndsWithPunctuationAndIsSingle(t *testing.T) {
+	d := line("私[わたし]は|駅[えき]で|会[あ]いました")
+	if err := checkLine(d); err != nil {
+		t.Fatal(err)
+	}
+	if got := sentence(d, identity(3)); got != "私は駅で会いました。" {
+		t.Fatalf("got %q", got)
+	}
+	q := line("これは|だれの|手紙[てがみ]ですか？")
+	if err := checkLine(q); err != nil || strings.Count(sentence(q, identity(3)), "？") != 1 || strings.HasSuffix(sentence(q, identity(3)), "。") {
+		t.Fatalf("question was changed: %v %q", err, sentence(q, identity(3)))
+	}
+	two := line("来[き]ませんか。|手紙[てがみ]は|入[い]れます")
+	if checkLine(two) == nil {
+		t.Fatal("two sentences accepted")
+	}
+}

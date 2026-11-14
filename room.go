@@ -411,38 +411,30 @@ func (r *Room) generate(ps []PlayerInfo, gen int) {
 	}
 	r.Phase = "briefing"
 	r.notify()
-	sem := make(chan struct{}, 3)
-	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			t := time.Now()
-			d, err := genLine(ctx, plan, ps, i)
-			r.mu.Lock()
-			defer r.mu.Unlock()
-			if gen != r.genID {
-				return
-			}
-			if err != nil {
-				logf("line %d failed: %v", i, err)
-				r.Lines[i].Status = "failed"
-			} else {
-				logf("line %d ready (%.1fs)", i, time.Since(t).Seconds())
-				r.Lines[i].Status, r.Lines[i].Data = "ready", d
-			}
-			if r.Phase == "playing" && r.Step == "scene" && r.Turn == i && r.Lines[i].Status == "failed" {
-				r.enterTurn(i)
-			}
-			r.notify()
-		}()
-	}
 	go func() {
-		wg.Wait()
-		cancel()
-		logf("all lines done")
+		defer cancel()
+		t := time.Now()
+		lines := genScript(ctx, plan, ps)
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		if gen != r.genID {
+			return
+		}
+		ok := 0
+		for i, d := range lines {
+			if d == nil {
+				r.Lines[i].Status = "failed"
+				continue
+			}
+			ok++
+			r.Lines[i].Status, r.Lines[i].Data = "ready", d
+			logf("line %d %s: %s", i, plan.Characters[plan.LinePlan[i].Player].Name, sentence(d, identity(len(d.Chunks))))
+		}
+		logf("script ready: %d/%d lines (%.1fs)", ok, n, time.Since(t).Seconds())
+		if r.Phase == "playing" && r.Step == "scene" && r.Lines[r.Turn].Status == "failed" {
+			r.enterTurn(r.Turn)
+		}
+		r.notify()
 	}()
 }
 

@@ -22,7 +22,11 @@ Write:
    - beat: one English sentence describing what happens in the story at this line
    - grammar: the grammar point or word type this line should practise, suited to the speaker's level
    - mood: one of calm, happy, excited, sad, tense, mysterious
-   The beats must form a story with a beginning, a turn, and an ending. Consecutive lines must connect.
+   The line_plan is one continuous conversation between the characters in a single place and time, not separate scenes.
+   - Each beat says what that character says, and to whom (name the character who is addressed, or everyone).
+   - Each beat must respond to the previous beat: an answer, a reaction, a follow-up question or a decision.
+   - Use a few concrete things (a place, an object, a problem) and mention them again in later beats.
+   - Beginning: introduce the situation. Middle: a small problem or discovery. Ending: the characters solve it or decide something together, and the last beat closes the story.
 
 Return only JSON with this shape:
 {

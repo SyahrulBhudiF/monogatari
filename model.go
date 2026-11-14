@@ -276,6 +276,13 @@ func checkLine(d *LineData) error {
 			}
 		}
 	}
+	// The sentence must end with punctuation, and must be a single sentence.
+	if last := &d.Chunks[n-1]; !strings.HasSuffix(strings.TrimSpace(chunkText(*last)), "。") && !strings.ContainsAny(chunkText(*last)[max(0, len(chunkText(*last))-3):], "！？") {
+		*last = append(*last, Seg{T: "。"})
+	}
+	if body := strings.TrimRight(sentence(d, identity(n)), "。！？"); strings.ContainsAny(body, "。！？") {
+		return fmt.Errorf("the line has more than one sentence. Write exactly one sentence")
+	}
 	id := identity(n)
 	orders := [][]int{id}
 	for _, o := range d.AcceptedOrders {
