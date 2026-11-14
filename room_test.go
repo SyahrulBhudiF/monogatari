@@ -184,3 +184,32 @@ func TestFinishedPage(t *testing.T) {
 		t.Error("a watcher can restart the game")
 	}
 }
+
+func TestSoloStartsAlone(t *testing.T) {
+	r := NewRoom()
+	a, b := strings.Repeat("a", 20), strings.Repeat("b", 20)
+	r.Join(a, "A", "")
+	r.streams[a] = 1
+	r.ToggleReady(a)
+	if r.Phase != "lobby" {
+		t.Fatal("one player started without solo mode")
+	}
+	r.ToggleReady(a)
+	r.SetSolo(a, true)
+	r.ToggleReady(a)
+	if r.Phase != "generating" {
+		t.Fatalf("solo player did not start: %s", r.Phase)
+	}
+
+	r2 := NewRoom()
+	r2.Join(a, "A", "")
+	r2.SetSolo(a, true)
+	r2.Join(b, "B", "")
+	if r2.Solo {
+		t.Fatal("solo stays on after a second player joins")
+	}
+	r2.SetSolo(a, true)
+	if r2.Solo {
+		t.Fatal("solo allowed with two players")
+	}
+}

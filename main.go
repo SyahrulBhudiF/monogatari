@@ -112,6 +112,7 @@ func newMux() *http.ServeMux {
 	post := func(path string, fn func(tok string, r *http.Request, s sig)) { mux.HandleFunc("POST "+path, act(fn)) }
 	post("/join", func(t string, r *http.Request, s sig) { room.Join(t, s.Name, s.Pass) })
 	post("/level", func(t string, r *http.Request, s sig) { room.SetLevel(t, qint(r, "lv")) })
+	post("/solo", func(t string, r *http.Request, s sig) { room.SetSolo(t, r.URL.Query().Get("on") == "1") })
 	post("/ready", func(t string, r *http.Request, s sig) { room.ToggleReady(t) })
 	post("/leave", func(t string, r *http.Request, s sig) { room.Leave(t) })
 	post("/kick", func(t string, r *http.Request, s sig) { room.Kick(t, r.URL.Query().Get("id")) })

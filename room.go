@@ -48,6 +48,7 @@ type Room struct {
 	genID    int
 	starts   []time.Time
 
+	Solo     bool
 	Pass     string
 	MaxGames int
 
@@ -239,8 +240,20 @@ func (r *Room) Join(token, name, pass string) {
 		}
 		r.Players = append(r.Players, &Player{Token: token, ID: randHex(6), Name: name, Level: level, Pos: pos, Open: map[string]bool{}})
 	}
+	r.Solo = len(r.Players) == 1 && r.Solo
 	r.clearReady()
 	r.notify()
+}
+
+// SetSolo lets a lone player in the lobby start a single-player reading game.
+func (r *Room) SetSolo(token string, on bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, p := r.find(token); p != nil && r.Phase == "lobby" && len(r.Players) == 1 && r.Solo != on {
+		r.Solo = on
+		r.clearReady()
+		r.notify()
+	}
 }
 
 func (r *Room) SetLevel(token string, lv int) {
@@ -347,7 +360,7 @@ func (r *Room) checkStart() {
 	}
 	rd, c := r.readyCount()
 	need := 1
-	if r.Phase == "lobby" {
+	if r.Phase == "lobby" && !r.Solo {
 		need = 2
 	}
 	if c < need || rd < c {
@@ -623,7 +636,7 @@ func (r *Room) Reset(token string) {
 		return
 	}
 	r.genID++
-	r.Phase, r.Err, r.Plan, r.Lines, r.Log = "lobby", "", nil, nil, nil
+	r.Phase, r.Err, r.Plan, r.Lines, r.Log, r.Solo = "lobby", "", nil, nil, nil, false
 	r.Players = slices.DeleteFunc(r.Players, func(p *Player) bool { return !r.on(p) })
 	for _, p := range r.Players {
 		p.Ready, p.Step = false, 0

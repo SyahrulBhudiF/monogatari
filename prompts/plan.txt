@@ -1,32 +1,38 @@
-You design a short Japanese visual novel for a multiplayer language-learning game.
+{{if .Solo}}You write a short Japanese reading text for a single-player language-learning game.
+One player reads it sentence by sentence. It is a narrated text, not a conversation.
+{{else}}You design a short Japanese visual novel for a multiplayer language-learning game.
 Players join one voice call and take turns. Each player speaks one character.
 The players have different JLPT levels and must still feel like one team in one story.
-
+{{end}}
 Players, in turn order. "lower" means just started the level, "upper" means nearly ready for the next one:
 {{range .Players}}- Player {{.Index}}: {{.Name}}, {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}})
 {{end}}
-The story has exactly {{.NLines}} lines. Line i is spoken by player (i mod {{len .Players}}), in strict rotation.
+{{if .Solo}}The text has exactly {{.NLines}} lines. Line i is the i-th sentence of the text.{{else}}The story has exactly {{.NLines}} lines. Line i is spoken by player (i mod {{len .Players}}), in strict rotation.{{end}}
 
 Write:
 1. scenario: a title, a one-sentence setting, a premise in two sentences, and one overall mood.
-2. characters: one per player, each with a Japanese first name, one emoji, a personality in a few words, and a speech style.
+2. characters: {{if .Solo}}exactly one, the main character the text is about{{else}}one per player{{end}}, with a Japanese first name, one emoji, a personality in a few words, and a speech style.
 3. briefings: one per player. Each contains:
    - reading: 3 to 5 short Japanese sentences about the scenario, written at that player's JLPT level. Put furigana after every kanji word as 漢字[かんじ]. Never add a reading after katakana or hiragana, such as a name.
    - reading_en: the English translation.
    - goal: what this player should focus on, in English, as one sentence naming grammar or vocabulary at their level.
-   - teach: one thing this player can explain to the others on voice, in English, one sentence.
+   - teach: {{if .Solo}}one tip the player can remember about their goal, in English, one sentence.{{else}}one thing this player can explain to the others on voice, in English, one sentence.{{end}}
    - words: 3 to 5 key words with reading and English meaning.
 4. line_plan: exactly {{.NLines}} entries. Each contains:
    - index: 0-based
-   - player: the speaking player
+   - player: {{if .Solo}}always 0{{else}}the speaking player{{end}}
    - beat: one English sentence describing what happens in the story at this line
    - grammar: the grammar point or word type this line should practise, suited to the speaker's level
    - mood: one of calm, happy, excited, sad, tense, mysterious
-   The line_plan is one continuous conversation between the characters in a single place and time, not separate scenes.
+{{if .Solo}}   The line_plan is one short narrated text in a single place and time, not separate scenes.
+   - Each beat says what happens in that sentence. The text is told by a narrator about the main character.
+   - Each beat continues the previous one: what happened next, or what the character saw, thought or did in response.
+   - Use a few concrete things (a place, an object, a problem) and mention them again in later beats.
+   - Beginning: introduce the character and the situation. Middle: a small problem or discovery. Ending: it is resolved, and the last beat closes the text.{{else}}   The line_plan is one continuous conversation between the characters in a single place and time, not separate scenes.
    - Each beat says what that character says, and to whom (name the character who is addressed, or everyone).
    - Each beat must respond to the previous beat: an answer, a reaction, a follow-up question or a decision.
    - Use a few concrete things (a place, an object, a problem) and mention them again in later beats.
-   - Beginning: introduce the situation. Middle: a small problem or discovery. Ending: the characters solve it or decide something together, and the last beat closes the story.
+   - Beginning: introduce the situation. Middle: a small problem or discovery. Ending: the characters solve it or decide something together, and the last beat closes the story.{{end}}
 
 Return only JSON with this shape:
 {

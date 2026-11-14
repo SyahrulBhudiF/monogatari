@@ -15,6 +15,6 @@ Check:
 2. answer_ok: exactly one option is correct, and it is the one marked.
 3. bad_orders: indexes (never 0) of accepted orders that are ungrammatical, unnatural, or change the meaning.
 
-4. narration: true if the line is narration about what happened, instead of something the character says aloud to the others.
-
+{{if not .Solo}}4. narration: true if the line is narration about what happened, instead of something the character says aloud to the others.
+{{end}}
 Return only JSON: {"natural": true, "answer_ok": true, "bad_orders": [], "narration": false, "note": "one short sentence if something is wrong"}

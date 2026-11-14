@@ -35,6 +35,7 @@ templ Guide() {
 				<button class="x" aria-label="Close" data-on:click="$guide=false">✕</button>
 			</div>
 			<div class="guide-body">
+				@GuideItem("🧍", "Solo mode", "Alone in the lobby, press Play solo, then Ready. You get a short narrated text instead of a conversation. You read it sentence by sentence: order the words, read aloud, answer the quiz. Everything else works the same.")
 				@GuideItem("🎙️", "Play on a voice call", "Everyone joins the same voice call, for example on Discord. The app shows the game. You talk to each other.")
 				@GuideItem("📖", "One story, many levels", "An AI writes a short story for your group. Each player is one character. Your lines match your own level, so an N5 and an N2 player can play together.")
 				@GuideItem("🪜", "Your level", "Pick one of 15 steps, from Low N5 to High N1. Low means you just started that level. High means you are close to the next one. Pick honestly: the AI uses it to choose words and grammar.")
@@ -211,9 +212,16 @@ templ LobbyView(v V) {
 		<h1>Lobby</h1>
 		@Roster(v, true)
 		@Slider(lvIndex(v.Me.Level, v.Me.Pos))
+		if len(v.R.Players) == 1 {
+			if v.R.Solo {
+				<button class="btn ghost" aria-pressed="true" data-on:click="@post('/solo?on=0')">Solo: on</button>
+			} else {
+				<button class="btn ghost" aria-pressed="false" data-on:click="@post('/solo?on=1')">Play solo</button>
+			}
+		}
 		@ReadyButton(v, "Ready", "Not ready")
-		if len(v.R.Players) < 2 {
-			<p class="muted center">Need 2 players</p>
+		if len(v.R.Players) < 2 && !v.R.Solo {
+			<p class="muted center">Need 2 players, or play solo</p>
 		}
 		if v.R.Err != "" {
 			<p class="err center" role="alert">{ v.R.Err }</p>
@@ -258,7 +266,16 @@ templ BriefingView(v V) {
 					</div>
 					<div class="mi teachc">
 						<span class="ic">💡</span>
-						<div><b>Teach the others</b><p>@Notation(br.Teach)</p></div>
+						<div>
+							<b>
+								if len(v.R.Players) == 1 {
+									Remember
+								} else {
+									Teach the others
+								}
+							</b>
+							<p>@Notation(br.Teach)</p>
+						</div>
 					</div>
 				</div>
 				if len(v.R.Players) > 1 {

@@ -176,7 +176,7 @@ func genPlan(ctx context.Context, ps []PlayerInfo, nLines int) (*Plan, error) {
 		time.Sleep(1500 * time.Millisecond)
 		return mockPlan(ps, nLines), nil
 	}
-	prompt, err := render("plan.txt", map[string]any{"Players": ps, "NLines": nLines})
+	prompt, err := render("plan.txt", map[string]any{"Players": ps, "NLines": nLines, "Solo": len(ps) == 1})
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int, hist []TLi
 	rng := chunkRange[pl.Level]
 	prompt, err := render("line.txt", map[string]any{
 		"Title": plan.Scenario.Title, "Setting": plan.Scenario.Setting,
-		"Characters": plan.Characters, "History": hist, "Prev": prev, "Beat": lp.Beat, "Next": next,
+		"Solo": len(ps) == 1, "Characters": plan.Characters, "History": hist, "Prev": prev, "Beat": lp.Beat, "Next": next,
 		"Speaker": plan.Characters[lp.Player], "Level": pl.Level, "Pos": pl.Pos, "LevelDesc": pl.LevelDesc,
 		"Grammar": lp.Grammar, "MinChunks": rng[0], "MaxChunks": rng[1],
 	})
@@ -227,13 +227,13 @@ func genLine(ctx context.Context, plan *Plan, ps []PlayerInfo, i int, hist []TLi
 		if err := lineErr(d, pl.Level); err != nil {
 			return err
 		}
-		return judgeLine(ctx, d, pl.Level)
+		return judgeLine(ctx, d, pl.Level, len(ps) == 1)
 	})
 }
 
 // judgeLine asks a second call to review a line that already passed the structural checks.
 // It drops accepted orders the reviewer rejects. If the review itself fails, the line is accepted.
-func judgeLine(ctx context.Context, d *LineData, level string) error {
+func judgeLine(ctx context.Context, d *LineData, level string, solo bool) error {
 	if !judgeOn || apiKey == "" {
 		return nil
 	}
@@ -247,7 +247,7 @@ func judgeLine(ctx context.Context, d *LineData, level string) error {
 	}
 	prompt, err := render("judge.txt", map[string]any{
 		"Level": level, "Sentence": sentence(d, identity(len(d.Chunks))), "English": d.English,
-		"Orders": orders, "Quiz": d.Quiz,
+		"Orders": orders, "Quiz": d.Quiz, "Solo": solo,
 	})
 	if err != nil {
 		return nil
@@ -271,7 +271,7 @@ func judgeLine(ctx context.Context, d *LineData, level string) error {
 	if !v.Natural {
 		return fmt.Errorf("a reviewer says the sentence is unnatural or ungrammatical: %s", v.Note)
 	}
-	if v.Narration {
+	if v.Narration && !solo {
 		return fmt.Errorf("the line is narration. It must be something the character says aloud to the others")
 	}
 	if !v.AnswerOK {
@@ -319,7 +319,7 @@ func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo) []*LineData {
 	var bad []int
 	prompt, err := render("script.txt", map[string]any{
 		"Title": plan.Scenario.Title, "Setting": plan.Scenario.Setting, "Premise": plan.Scenario.Premise,
-		"Characters": plan.Characters, "Lines": sl, "N": n,
+		"Characters": plan.Characters, "Lines": sl, "N": n, "Solo": len(ps) == 1,
 	})
 	var sc *struct {
 		Lines []LineData `json:"lines"`
@@ -369,7 +369,7 @@ func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo) []*LineData {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if e := judgeLine(ctx, out[i], ps[plan.LinePlan[i].Player].Level); e != nil {
+				if e := judgeLine(ctx, out[i], ps[plan.LinePlan[i].Player].Level, len(ps) == 1); e != nil {
 					logf("line %d rejected: %v", i, e)
 					mu.Lock()
 					bad = append(bad, i)

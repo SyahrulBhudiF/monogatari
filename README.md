@@ -7,11 +7,15 @@ Go server, [Datastar](https://data-star.dev) UI, [templ](https://templ.guide) vi
 ## How a game works
 
 1. **Join.** Enter a name and pick a level on a 15-step scale, from Low N5 to High N1.
-2. **Ready vote.** The game starts when 2 or more players are connected and all pressed Ready.
+2. **Ready vote.** The game starts when 2 or more players are connected and all pressed Ready (or one player, in solo mode).
 3. **Generation.** The server writes the story, then the full dialogue, with every line at its speaker's level.
 4. **Briefing.** Each player sees a goal, one thing to teach the others, key words and a short reading.
 5. **Turns.** Strict rotation. Order the word blocks, check, read the sentence aloud, answer a quiz. Wrong answers and wrong orders can be retried or shown, never punished.
 6. **Wrap-up.** Full story, stars, missed lines and every player's word list.
+
+### Solo mode
+
+Alone in the lobby, press **Play solo** and then **Ready**. Instead of a conversation you get a short narrated text about one character, written at your level. You read it sentence by sentence and play the same turn each time: order the words, read aloud, answer the quiz. Everything else is unchanged. Solo turns off if a second player joins, and needs no second player to start.
 
 The in-app **How to play** button explains the same in more detail.
 
@@ -65,7 +69,7 @@ Set `ROOM_PASSPHRASE` before putting the app on a public address. Every story co
 - **Server-driven UI.** Each browser opens one SSE stream (`/stream`). Whenever the room changes, the server re-renders that player's page and Datastar morphs it into the DOM. Buttons send small `POST` requests. The browser holds no game logic.
 - **Identity.** A random token in `sessionStorage` identifies a player. It is never put in a page: pages only carry a separate public id. A refresh keeps your seat. A new tab is a new player.
 - **Generation** (`llm.go`, `prompts/`):
-  1. A plan call writes the scenario, characters, per-player briefings and one beat per line.
+  1. A plan call writes the scenario, characters, per-player briefings and one beat per line. With one player it plans a narrated text instead of a conversation.
   2. A script call writes all lines in one pass so they read as one conversation.
   3. Each line is checked by code (furigana, chunk count for the level, one sentence, valid orders, quiz shape), then by a second review call. Lines that fail are rewritten one at a time with the earlier dialogue as context.
 - **Dropouts.** If the active player disconnects, the server plays their turn with the right answers after 8 seconds. Auto-played turns earn no stars. The host (first connected player) can also skip a turn or remove someone in the lobby.

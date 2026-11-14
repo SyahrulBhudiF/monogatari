@@ -1,11 +1,11 @@
-You write one line of a Japanese visual novel for a language-learning game.
+{{if .Solo}}You write one sentence of a short Japanese reading text for a single-player language-learning game.{{else}}You write one line of a Japanese visual novel for a language-learning game.{{end}}
 The player will reorder the chunks of your sentence, then read it aloud, then answer one quiz question about it.
 
 Story: {{.Title}}. {{.Setting}}
 Characters:
 {{range .Characters}}- {{.Name}}: {{.Personality}}; speech style: {{.SpeechStyle}}
 {{end}}
-Dialogue so far (this is what was actually said):
+{{if .Solo}}Text so far (this is what was actually written):{{else}}Dialogue so far (this is what was actually said):{{end}}
 {{range .History}}{{.Name}}: {{.JP}} ({{.EN}})
 {{else}}(nothing yet, this is the opening)
 {{end}}Previous beat: {{.Prev}}
@@ -15,11 +15,14 @@ Speaker: {{.Speaker.Name}}, speech style: {{.Speaker.SpeechStyle}}
 Learner level: {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}}). Lower means just started this level: stay at the easier end. Upper means nearly ready for the next level: you may use a little of the next level.
 Grammar to practise: {{.Grammar}}
 
-Write one sentence the speaker says in this beat. It is one turn in a real conversation:
+{{if .Solo}}Write the next sentence of the text for this beat. It is narration about the main character:
+- It must follow directly from the last sentence so far. Do not restart or change the subject.
+- Reuse the same people, places and objects already mentioned instead of inventing new ones.
+- Keep the same facts. Never contradict an earlier sentence. No dialogue and no quotes.{{else}}Write one sentence the speaker says in this beat. It is one turn in a real conversation:
 - It must follow directly from the last line of the dialogue so far: answer it, react to it, or continue it. Do not restart or change the subject.
 - Speak to the other characters by name or with あなた/きみ where natural. Reuse the same people, places and objects already mentioned instead of inventing new ones.
 - Keep the same facts. Never contradict an earlier line.
-- Each line is what the character says aloud to the others, in first person. It is never narration about other people (no "he said that...").
+- Each line is what the character says aloud to the others, in first person. It is never narration about other people (no "he said that...").{{end}}
 - It must still say what this beat says, and lead into the next beat.
 - Use only vocabulary and grammar a JLPT {{.Level}} learner can read, plus at most 2 new words.
 - Split the sentence into {{.MinChunks}} to {{.MaxChunks}} chunks (bunsetsu). A chunk is a content word with its particles or endings, for example 駅で, 友達に, 会いました. Each chunk stays together when reordered.
