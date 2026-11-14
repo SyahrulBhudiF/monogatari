@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+GO_ROOT="$HOME/sdk/go"
+export PATH="$GO_ROOT/bin:$HOME/go/bin:$PATH"
+
+want="$(awk '/^go /{print $2}' go.mod)"
+case "$(uname -m)" in aarch64|arm64) arch=arm64 ;; *) arch=amd64 ;; esac
+
+echo "== Go $want"
+if ! command -v go >/dev/null || [ "$(go env GOVERSION)" != "go$want" ]; then
+  tmp="$(mktemp -d)"
+  curl -fsSL "https://go.dev/dl/go${want}.linux-${arch}.tar.gz" -o "$tmp/go.tgz"
+  rm -rf "$GO_ROOT"
+  mkdir -p "$HOME/sdk"
+  tar -C "$tmp" -xzf "$tmp/go.tgz"
+  mv "$tmp/go" "$GO_ROOT"
+  rm -rf "$tmp"
+fi
+
+marker="# monogatari Go toolchain"
+if ! grep -Fqx "$marker" "$HOME/.bash_profile" 2>/dev/null; then
+  cat >> "$HOME/.bash_profile" <<PROFILE
+
+$marker
+export PATH="\$HOME/sdk/go/bin:\$HOME/go/bin:\$PATH"
+PROFILE
+fi
+
+echo "== Go modules"
+go mod download
+
+echo "== templ"
+templ_ver="$(go list -m -f '{{.Version}}' github.com/a-h/templ)"
+if ! command -v templ >/dev/null || ! templ version 2>/dev/null | grep -Fq "$templ_ver"; then
+  go install "github.com/a-h/templ/cmd/templ@$templ_ver"
+fi
+
+echo "== build"
+go build ./...
