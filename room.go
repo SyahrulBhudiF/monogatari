@@ -638,7 +638,7 @@ func (r *Room) act(token, step string, fn func(l *LineData)) {
 func (r *Room) Begin(token string) {
 	r.act(token, "scene", func(l *LineData) {
 		n := len(l.Chunks)
-		for try := 0; try < 30; try++ {
+		for range 30 {
 			r.Shuf = mrand.Perm(n)
 			if !acceptedOrder(l, r.Shuf) {
 				break
@@ -719,7 +719,7 @@ func (r *Room) Next(token string) {
 }
 
 // Reset starts a new lobby after a finished game. Anyone can do it, including people who left.
-func (r *Room) Reset(token string) {
+func (r *Room) Reset() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.Phase != "finished" {

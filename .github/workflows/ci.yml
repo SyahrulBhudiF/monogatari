@@ -1,0 +1,107 @@
+# Checks every change. Each check is its own job, so they run at the same
+# time, and the last job is the one gate for branch protection.
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+# A newer push to the same ref supersedes the run in flight. A pull request is
+# cancelled; a push to main runs to the end, so every commit that lands is checked.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install tools
+        run: scripts/install-tools.sh
+      - name: Check generated templates are current
+        # The *_templ.go files are committed so a build needs no templ.
+        run: |
+          templ generate
+          git diff --exit-code -- '*_templ.go'
+      - name: Check go.mod and go.sum are tidy
+        run: go mod tidy -diff
+      - name: Check formatting
+        # gofumpt is gofmt with stricter rules, run through golangci-lint.
+        run: golangci-lint fmt --diff
+      - name: Build
+        run: go build ./...
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install tools
+        run: scripts/install-tools.sh
+      # The linter type-checks by compiling and keeps its own analysis cache,
+      # so a run after the first looks only at what changed.
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/golangci-lint
+          key: golangci-lint-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum', '.golangci.yml', 'scripts/install-tools.sh') }}
+          restore-keys: golangci-lint-${{ runner.os }}-
+      - name: golangci-lint
+        run: golangci-lint run
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test -race ./...
+
+  scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Install tools
+        run: scripts/install-tools.sh
+      - name: Check shell scripts
+        run: shellcheck --severity=warning .agents/setup .agents/resume scripts/*.sh
+      - name: Check workflows
+        run: actionlint -color
+
+  # One gate for branch protection. It passes only when every job above
+  # passes, so a new check guards main as soon as it is added to needs.
+  checks:
+    if: always()
+    needs: [verify, lint, test, scripts]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All checks must pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "One or more checks failed: $RESULTS"
+              exit 1
+            fi
+          done
+          echo "All checks passed."

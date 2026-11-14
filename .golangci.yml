@@ -1,0 +1,34 @@
+# golangci-lint v2. The defaults (errcheck, govet, ineffassign, staticcheck,
+# unused) plus linters that catch slop: leaked bodies, lost contexts, wrapped
+# errors compared with ==, unchecked type assertions, and dead code.
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - contextcheck
+    - errorlint
+    - nilerr
+    - noctx
+    - forcetypeassert
+    - copyloopvar
+    - wastedassign
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - intrange
+    - gocritic
+    - nolintlint
+  settings:
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+  exclusions:
+    # templ output is generated; golangci-lint skips files marked as generated.
+    generated: lax
+
+formatters:
+  enable:
+    - gofumpt
+  exclusions:
+    generated: lax

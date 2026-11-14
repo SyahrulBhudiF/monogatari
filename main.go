@@ -44,7 +44,7 @@ type asset struct {
 
 func loadAssets() map[string]*asset {
 	out := map[string]*asset{}
-	fs.WalkDir(staticFS, "static", func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(staticFS, "static", func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return err
 		}
@@ -54,13 +54,16 @@ func loadAssets() map[string]*asset {
 		if !strings.HasSuffix(p, ".woff2") {
 			var gz bytes.Buffer
 			zw, _ := gzip.NewWriterLevel(&gz, gzip.BestCompression)
-			zw.Write(b)
-			zw.Close()
+			_, _ = zw.Write(b) // writes to a bytes.Buffer cannot fail
+			_ = zw.Close()
 			a.gz = gz.Bytes()
 		}
 		out["/"+p] = a
 		return nil
 	})
+	if err != nil {
+		panic(err) // the embedded files are fixed at build time
+	}
 	return out
 }
 
@@ -87,7 +90,7 @@ func serveStatic(assets map[string]*asset) http.HandlerFunc {
 			body = a.gz
 		}
 		h.Set("Content-Length", strconv.Itoa(len(body)))
-		w.Write(body)
+		_, _ = w.Write(body)
 	}
 }
 
@@ -100,7 +103,7 @@ type sig struct {
 
 func readSig(r *http.Request) sig {
 	var s sig
-	datastar.ReadSignals(r, &s)
+	_ = datastar.ReadSignals(r, &s) // bad input leaves s empty, and an empty pid is rejected
 	return s
 }
 
@@ -116,7 +119,7 @@ func index(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(indexHTML)
+	_, _ = w.Write(indexHTML)
 }
 
 // clientIP prefers the first X-Forwarded-For entry, which the portal proxy sets.
@@ -142,12 +145,12 @@ func stream(w http.ResponseWriter, r *http.Request) {
 	sse := datastar.NewSSE(w, r, datastar.WithCompression(datastar.WithBrotli(datastar.WithBrotliLevel(4)), datastar.WithGzip()))
 	ch := make(chan struct{}, 1)
 	room.connect(tok, ch)
-	defer room.disconnect(tok, ch)
+	defer room.disconnect(tok, ch) //nolint:contextcheck // the room outlives any one request, so its goroutines must not use the request context
 	tick := time.NewTicker(20 * time.Second)
 	defer tick.Stop()
 	// send patches the page only when this viewer's HTML changed since the last frame.
 	var last string
-	send := func(force bool) bool {
+	send := func(force bool) bool { //nolint:contextcheck // rendering only builds a string and needs no cancellation
 		v := room.View(tok)
 		if v == last && !force {
 			return true
@@ -221,7 +224,7 @@ func newMux() *http.ServeMux {
 	post("/readdone", func(t string, r *http.Request, s sig) { room.ReadDone(t) })
 	post("/answer", func(t string, r *http.Request, s sig) { room.Answer(t, qint(r, "o")) })
 	post("/next", func(t string, r *http.Request, s sig) { room.Next(t) })
-	post("/reset", func(t string, r *http.Request, s sig) { room.Reset(t) })
+	post("/reset", func(t string, r *http.Request, s sig) { room.Reset() })
 	return mux
 }
 

@@ -31,11 +31,8 @@ fi
 echo "== Go modules"
 go mod download
 
-echo "== templ"
-templ_ver="$(go list -m -f '{{.Version}}' github.com/a-h/templ)"
-if ! command -v templ >/dev/null || ! templ version 2>/dev/null | grep -Fq "$templ_ver"; then
-  go install "github.com/a-h/templ/cmd/templ@$templ_ver"
-fi
+echo "== dev tools"
+scripts/install-tools.sh
 
 echo "== build"
 go build ./...

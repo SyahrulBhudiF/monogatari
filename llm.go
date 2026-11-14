@@ -6,6 +6,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -79,7 +80,7 @@ func newReq(ctx context.Context, model string, msgs []map[string]string, jsonMod
 		body["response_format"] = map[string]string{"type": "json_object"}
 	}
 	b, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(ctx, "POST", "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(b))
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://openrouter.ai/api/v1/chat/completions", bytes.NewReader(b))
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Title", "Monogatari")
@@ -92,9 +93,9 @@ func chat(ctx context.Context, model string, msgs []map[string]string, jsonMode 
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		s := string(data)
 		if len(s) > 300 {
 			s = s[:300]
@@ -126,7 +127,7 @@ func chat(ctx context.Context, model string, msgs []map[string]string, jsonMode 
 func chatAuto(ctx context.Context, model string, msgs []map[string]string) (string, error) {
 	_, skip := noFormat.Load(model)
 	txt, err := chat(ctx, model, msgs, !skip)
-	if ae, ok := err.(*apiError); ok && ae.Status == 400 && !skip {
+	if ae := (*apiError)(nil); errors.As(err, &ae) && ae.Status == http.StatusBadRequest && !skip {
 		noFormat.Store(model, true)
 		return chat(ctx, model, msgs, false)
 	}
@@ -137,7 +138,7 @@ func chatAuto(ctx context.Context, model string, msgs []map[string]string) (stri
 func chatStream(ctx context.Context, model string, msgs []map[string]string, onDelta func(string)) error {
 	_, skip := noFormat.Load(model)
 	err := streamOnce(ctx, model, msgs, !skip, onDelta)
-	if ae, ok := err.(*apiError); ok && ae.Status == 400 && !skip {
+	if ae := (*apiError)(nil); errors.As(err, &ae) && ae.Status == http.StatusBadRequest && !skip {
 		noFormat.Store(model, true)
 		return streamOnce(ctx, model, msgs, false, onDelta)
 	}
@@ -149,8 +150,8 @@ func streamOnce(ctx context.Context, model string, msgs []map[string]string, jso
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
 		return &apiError{resp.StatusCode, string(data)}
 	}
@@ -200,7 +201,7 @@ type objSplit struct {
 }
 
 func (o *objSplit) feed(s string) (out [][]byte) {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		c := s[i]
 		if !o.inArr {
 			o.inArr = c == '['
@@ -212,11 +213,12 @@ func (o *objSplit) feed(s string) (out [][]byte) {
 		o.cur = append(o.cur, c)
 		switch {
 		case o.inStr:
-			if o.esc {
+			switch {
+			case o.esc:
 				o.esc = false
-			} else if c == '\\' {
+			case c == '\\':
 				o.esc = true
-			} else if c == '"' {
+			case c == '"':
 				o.inStr = false
 			}
 		case c == '"':
@@ -244,7 +246,7 @@ func extractJSON(s string) string {
 func generate[T any](ctx context.Context, name, prompt string, check func(*T) error) (*T, error) {
 	var feedback string
 	var last error
-	for attempt := 0; attempt < 4; attempt++ {
+	for attempt := range 4 {
 		model := models[attempt%len(models)]
 		msgs := []map[string]string{{"role": "user", "content": prompt}}
 		if feedback != "" {
@@ -264,7 +266,7 @@ func generate[T any](ctx context.Context, name, prompt string, check func(*T) er
 		}
 		var v T
 		if err := json.Unmarshal([]byte(extractJSON(txt)), &v); err != nil {
-			last = fmt.Errorf("invalid JSON: %v", err)
+			last = fmt.Errorf("invalid JSON: %w", err)
 			feedback = last.Error()
 			logf("%s attempt %d (%s): %v", name, attempt+1, model, last)
 			continue
@@ -365,7 +367,7 @@ func judgeLine(ctx context.Context, d *LineData, level string, solo bool) error 
 		"Orders": orders, "Quiz": d.Quiz, "Solo": solo,
 	})
 	if err != nil {
-		return nil
+		return nil //nolint:nilerr // a broken review prompt must not reject a line that passed the checks
 	}
 	txt, err := chatAuto(ctx, models[0], []map[string]string{{"role": "user", "content": prompt}})
 	if err != nil {
@@ -381,7 +383,7 @@ func judgeLine(ctx context.Context, d *LineData, level string, solo bool) error 
 	}
 	if json.Unmarshal([]byte(extractJSON(txt)), &v) != nil {
 		logf("judge skipped: invalid JSON")
-		return nil
+		return nil //nolint:nilerr // the review is advisory: if it fails, the line is accepted
 	}
 	if !v.Natural {
 		return fmt.Errorf("a reviewer says the sentence is unnatural or ungrammatical: %s", v.Note)
@@ -416,7 +418,7 @@ type scriptLine struct {
 func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo, done func(i int, d *LineData)) {
 	n := len(plan.LinePlan)
 	if apiKey == "" {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			time.Sleep(400 * time.Millisecond)
 			done(i, mockLine(i))
 		}
@@ -427,8 +429,10 @@ func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo, done func(i int
 	for i, lp := range plan.LinePlan {
 		pl := ps[lp.Player]
 		rng := chunkRange[pl.Level]
-		sl = append(sl, scriptLine{Index: i, MinChunks: rng[0], MaxChunks: rng[1], Name: plan.Characters[lp.Player].Name,
-			Level: pl.Level, Pos: pl.Pos, LevelDesc: pl.LevelDesc, Beat: lp.Beat, Gram: lp.Grammar})
+		sl = append(sl, scriptLine{
+			Index: i, MinChunks: rng[0], MaxChunks: rng[1], Name: plan.Characters[lp.Player].Name,
+			Level: pl.Level, Pos: pl.Pos, LevelDesc: pl.LevelDesc, Beat: lp.Beat, Gram: lp.Grammar,
+		})
 	}
 	prompt, err := render("script.txt", map[string]any{
 		"Title": plan.Scenario.Title, "Setting": plan.Scenario.Setting, "Premise": plan.Scenario.Premise,
@@ -455,7 +459,7 @@ func genScript(ctx context.Context, plan *Plan, ps []PlayerInfo, done func(i int
 		}
 		var hist []TLine
 		mu.Lock()
-		for j := 0; j < i; j++ {
+		for j := range i {
 			if v := valid[j]; v != nil {
 				hist = append(hist, TLine{Name: plan.Characters[plan.LinePlan[j].Player].Name, JP: sentence(v, identity(len(v.Chunks))), EN: v.English})
 			}

@@ -77,8 +77,10 @@ type PlayerInfo struct {
 	LevelDesc string
 }
 
-var levels = []string{"N5", "N4", "N3", "N2", "N1"}
-var positions = []string{"lower", "middle", "upper"}
+var (
+	levels    = []string{"N5", "N4", "N3", "N2", "N1"}
+	positions = []string{"lower", "middle", "upper"}
+)
 
 func splitLv(lv int) (string, string) {
 	lv = max(0, min(14, lv))

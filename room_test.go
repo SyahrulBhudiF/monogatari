@@ -11,7 +11,7 @@ func playingRoom(n int) (*Room, []string) {
 	r := NewRoom()
 	var toks []string
 	var infos []PlayerInfo
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tok := strings.Repeat(string(rune('a'+i)), 20)
 		toks = append(toks, tok)
 		r.Join(tok, "P"+string(rune('1'+i)))
@@ -20,7 +20,7 @@ func playingRoom(n int) (*Room, []string) {
 	}
 	nl := nLinesFor(n)
 	r.Plan = mockPlan(infos, nl)
-	for i := 0; i < nl; i++ {
+	for i := range nl {
 		r.Lines = append(r.Lines, &LineState{Status: "ready", Plan: r.Plan.LinePlan[i], Data: mockLine(i)})
 	}
 	r.Phase = "playing"
@@ -146,7 +146,7 @@ func TestPassphraseGate(t *testing.T) {
 func TestPassphraseBruteForceLimit(t *testing.T) {
 	r := NewRoom()
 	r.Pass = "sesame"
-	for i := 0; i < maxFails; i++ {
+	for i := range maxFails {
 		r.Unlock(strings.Repeat(string(rune('a'+i)), 20), "9.9.9.9", "nope")
 	}
 	fresh := strings.Repeat("z", 20) // a new token from the same address
@@ -280,7 +280,7 @@ func TestLeaveMidGameAndAbort(t *testing.T) {
 func TestFinishedResetByAnyone(t *testing.T) {
 	r, toks := playingRoom(2)
 	r.Phase = "finished"
-	r.Reset("zzzzzzzzzzzzzzzzzzzz")
+	r.Reset()
 	if r.Phase != "lobby" || len(r.Players) != 2 {
 		t.Fatalf("phase %s players %d", r.Phase, len(r.Players))
 	}
