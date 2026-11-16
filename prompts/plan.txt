@@ -4,6 +4,15 @@ One player reads it sentence by sentence. It is a narrated text, not a conversat
 Players join one voice call and take turns. Each player speaks one character.
 The players have different JLPT levels and must still feel like one team in one story.
 {{end}}
+Choose the topic yourself. Make it a realistic everyday situation in Japan, with ordinary people. Some broad areas, for ideas only:
+- work and job hunting: applying for jobs, interviews, a new job, part-time work, coworkers, deadlines
+- IT and technology: computers, phones, the internet, apps, programming, online accounts
+- home and daily life: housing, neighbors, cooking, shopping, chores, money
+- getting around and public services: trains, deliveries, the doctor, the bank, the city office
+- school and study: classes, exams, clubs, learning a skill
+- free time and people: friends, family, hobbies, trips, events, seasons
+Pick one area, then invent a specific situation in it with a concrete place, time and problem. Avoid the obvious first idea; make it specific enough that another game in the same area would be different.
+
 Players, in turn order. "lower" means just started the level, "upper" means nearly ready for the next one:
 {{range .Players}}- Player {{.Index}}: {{.Name}}, {{.Pos}} JLPT {{.Level}} ({{.LevelDesc}})
 {{end}}
